@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Tracker</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1f2328; --muted: #6b7280; --line: #e5e7eb;
+    --primary: #2563eb; --primary-weak: #dbeafe; --danger: #dc2626; --danger-weak: #fee2e2;
+    --warn: #b45309; --warn-weak: #fef3c7; --ok: #15803d; --ok-weak: #dcfce7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #181b21; --text: #e6e8eb; --muted: #9aa3af; --line: #2a2f37;
+      --primary: #60a5fa; --primary-weak: #1e3a5f; --danger: #f87171; --danger-weak: #4c1d1d;
+      --warn: #fbbf24; --warn-weak: #4a3510; --ok: #4ade80; --ok-weak: #123a22;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans Thai", sans-serif;
+         background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 12px 16px;
+           display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;
+           position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 18px; margin: 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { border: 0; background: transparent; color: var(--muted); padding: 8px 12px; border-radius: 8px;
+         font-size: 15px; cursor: pointer; }
+  .tab.active { background: var(--primary-weak); color: var(--primary); font-weight: 600; }
+  .badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; font-size: 12px;
+           background: var(--danger); color: #fff; text-align: center; margin-left: 4px; }
+  button, .btn { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+                 padding: 7px 12px; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; }
+  button:hover, .btn:hover { border-color: var(--primary); }
+  .primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .danger { color: var(--danger); }
+  .small { padding: 4px 8px; font-size: 13px; }
+  input, select, textarea { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+                            background: var(--bg); color: var(--text); width: 100%; }
+  textarea { min-height: 70px; resize: vertical; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 2px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .toolbar input, .toolbar select { width: auto; flex: 1 1 160px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .muted { color: var(--muted); }
+  .section-title { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  .item { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap;
+          padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+          margin-bottom: 8px; cursor: pointer; }
+  .item:hover { border-color: var(--primary); }
+  .item .main { flex: 1 1 260px; min-width: 0; }
+  .item .name { font-weight: 600; }
+  .item.overdue { border-left: 4px solid var(--danger); }
+  .item.today { border-left: 4px solid var(--warn); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+          background: var(--primary-weak); color: var(--primary); white-space: nowrap; }
+  .pill.s-new { background: var(--primary-weak); color: var(--primary); }
+  .pill.s-contacted { background: var(--warn-weak); color: var(--warn); }
+  .pill.s-interested { background: #ede9fe; color: #6d28d9; }
+  .pill.s-proposal { background: #cffafe; color: #0e7490; }
+  .pill.s-won { background: var(--ok-weak); color: var(--ok); }
+  .pill.s-lost { background: var(--line); color: var(--muted); }
+  .date-overdue { color: var(--danger); font-weight: 600; }
+  .date-today { color: var(--warn); font-weight: 600; }
+  .empty { text-align: center; color: var(--muted); padding: 24px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer; }
+  .stat b { font-size: 22px; display: block; }
+  /* modal */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; z-index: 20;
+             align-items: flex-start; justify-content: center; padding: 20px 10px; overflow-y: auto; }
+  .overlay.open { display: flex; }
+  .modal { background: var(--card); border-radius: 14px; width: 100%; max-width: 760px; padding: 18px; }
+  .modal h2 { margin: 0 0 12px; font-size: 18px; }
+  .row-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
+  .timeline { border-left: 2px solid var(--line); margin-left: 6px; padding-left: 14px; }
+  .log { position: relative; margin-bottom: 12px; }
+  .log::before { content: ""; position: absolute; left: -21px; top: 6px; width: 10px; height: 10px; border-radius: 50%;
+                 background: var(--primary); }
+  .log .meta { font-size: 12px; color: var(--muted); }
+  .log .next { font-size: 13px; color: var(--warn); }
+  .hit-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 12px;
+             border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin-bottom: 8px; }
+  .hit-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .hit-actions input { width: 150px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 8px 16px; border-radius: 8px; display: none; z-index: 30; }
+  .warnbar { background: var(--warn-weak); color: var(--warn); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px;
+             display: none; }
+  @media (max-width: 600px) { .hit-row { grid-template-columns: 1fr; } .hit-actions input { flex: 1; width: auto; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>📇 Lead Tracker</h1>
+  <nav class="tabs">
+    <button class="tab active" data-tab="todo">✅ ต้องทำ<span id="todoBadge"></span></button>
+    <button class="tab" data-tab="leads">👥 Leads ทั้งหมด</button>
+    <button class="tab" data-tab="hit">📞 Hit List<span id="hitBadge"></span></button>
+    <button class="tab" data-tab="backup">💾 สำรองข้อมูล</button>
+  </nav>
+  <button class="primary" onclick="openLead()">+ เพิ่ม Lead</button>
+</header>
+
+<main>
+  <div class="warnbar" id="backupWarn"></div>
+
+  <!-- TAB: TODO -->
+  <section id="tab-todo">
+    <div class="stats" id="stats"></div>
+    <div id="todoList"></div>
+  </section>
+
+  <!-- TAB: LEADS -->
+  <section id="tab-leads" hidden>
+    <div class="toolbar">
+      <input id="search" placeholder="🔍 ค้นหา ชื่อ / บริษัท / เบอร์ / โน้ต">
+      <select id="statusFilter"><option value="">ทุกสถานะ</option></select>
+      <select id="sortBy">
+        <option value="next">เรียงตาม: วันที่ต้องทำต่อ</option>
+        <option value="updated">เรียงตาม: อัปเดตล่าสุด</option>
+        <option value="name">เรียงตาม: ชื่อ</option>
+      </select>
+    </div>
+    <div id="leadList"></div>
+  </section>
+
+  <!-- TAB: HIT LIST -->
+  <section id="tab-hit" hidden>
+    <div class="card">
+      <b>Hit List = รายชื่อที่ยังไม่มีเบอร์โทร</b>
+      <div class="muted">กด "ค้น Google" เพื่อหาเบอร์ → วางเบอร์ในช่อง → กด "บันทึก" รายชื่อจะย้ายไปอยู่ใน Leads พร้อมโทร</div>
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer">➕ เพิ่มรายชื่อทีละหลายคน (วางเป็นบรรทัด)</summary>
+        <div style="margin-top:8px">
+          <label>1 บรรทัด = 1 คน รูปแบบ: <code>ชื่อ, บริษัท, เว็บไซต์/ลิงก์ (ถ้ามี)</code></label>
+          <textarea id="bulkInput" placeholder="คุณสมชาย, บริษัท ABC จำกัด, abc.co.th&#10;คุณสมหญิง, XYZ Trading"></textarea>
+          <div class="row-actions"><button class="primary" onclick="bulkAdd()">เพิ่มเข้า Hit List</button></div>
+        </div>
+      </details>
+    </div>
+    <div class="toolbar">
+      <select id="hitFilter">
+        <option value="todo">ยังไม่ได้หา / กำลังหา</option>
+        <option value="notfound">หาไม่เจอ (ลอง 3 ครั้งขึ้นไป)</option>
+        <option value="all">ทั้งหมดที่ไม่มีเบอร์</option>
+      </select>
+    </div>
+    <div id="hitList"></div>
+  </section>
+
+  <!-- TAB: BACKUP -->
+  <section id="tab-backup" hidden>
+    <div class="card">
+      <b>ข้อมูลเก็บไว้ในเบราว์เซอร์เครื่องนี้</b>
+      <p class="muted">ถ้าล้างประวัติเบราว์เซอร์ หรือเปลี่ยนเครื่อง ข้อมูลจะหาย — กรุณากด "ดาวน์โหลดไฟล์สำรอง" อย่างน้อยสัปดาห์ละครั้ง แล้วเก็บไฟล์ไว้ (เช่น Google Drive)</p>
+      <div class="toolbar">
+        <button class="primary" onclick="exportJSON()">⬇️ ดาวน์โหลดไฟล์สำรอง (.json)</button>
+        <button onclick="exportCSV()">⬇️ ส่งออกเป็น Excel (.csv)</button>
+        <label class="btn" style="margin:0;color:var(--text);font-size:15px">⬆️ นำเข้าไฟล์สำรอง
+          <input type="file" accept=".json" onchange="importJSON(event)" hidden>
+        </label>
+      </div>
+      <p class="muted" id="backupInfo"></p>
+    </div>
+  </section>
+</main>
+
+<!-- LEAD MODAL -->
+<div class="overlay" id="leadModal">
+  <div class="modal">
+    <h2 id="modalTitle">Lead</h2>
+    <div class="grid">
+      <div><label>ชื่อผู้ติดต่อ *</label><input id="f-name"></div>
+      <div><label>บริษัท</label><input id="f-company"></div>
+      <div><label>เบอร์โทร</label><input id="f-phone" inputmode="tel"></div>
+      <div><label>อีเมล / LINE</label><input id="f-email"></div>
+      <div><label>เว็บไซต์ / ลิงก์</label><input id="f-website"></div>
+      <div><label>มาจากไหน (แหล่งที่มา)</label><input id="f-source" placeholder="เช่น งานแฟร์, แนะนำ, Facebook"></div>
+      <div><label>สถานะ</label><select id="f-status"></select></div>
+      <div><label>มูลค่าโดยประมาณ (บาท)</label><input id="f-value" inputmode="numeric"></div>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div style="grid-column: 1 / -1"><label>🎯 สิ่งที่ต้องทำต่อ (What's next)</label><input id="f-next" placeholder="เช่น โทรตามใบเสนอราคา"></div>
+      <div><label>📅 ภายในวันที่</label><input id="f-nextDate" type="date"></div>
+    </div>
+    <div style="margin-top:10px"><label>โน้ตทั่วไป</label><textarea id="f-notes"></textarea></div>
+
+    <div id="logSection">
+      <div class="section-title">🗒️ บันทึกการคุย (Log)</div>
+      <div class="card" style="background:var(--bg)">
+        <div class="grid">
+          <div><label>ช่องทาง</label>
+            <select id="l-type">
+              <option>📞 โทร</option><option>💬 LINE/แชท</option><option>✉️ อีเมล</option>
+              <option>🤝 เจอตัว</option><option>📝 อื่นๆ</option>
+            </select></div>
+          <div><label>วันที่คุย</label><input id="l-date" type="date"></div>
+        </div>
+        <div style="margin-top:8px"><label>คุยอะไรกัน / ผลเป็นยังไง</label><textarea id="l-text" placeholder="เช่น ลูกค้าสนใจรุ่น A ขอใบเสนอราคา งบประมาณ 50,000"></textarea></div>
+        <div class="grid" style="margin-top:8px">
+          <div style="grid-column: 1 / -1"><label>🎯 ขั้นต่อไป (จะอัปเดตช่อง What's next ด้านบนให้อัตโนมัติ)</label><input id="l-next" placeholder="เช่น ส่งใบเสนอราคา"></div>
+          <div><label>📅 ภายในวันที่</label><input id="l-nextDate" type="date"></div>
+          <div><label>เปลี่ยนสถานะเป็น</label><select id="l-status"><option value="">(ไม่เปลี่ยน)</option></select></div>
+        </div>
+        <div class="row-actions"><button class="primary" onclick="addLog()">+ บันทึก Log</button></div>
+      </div>
+      <div class="timeline" id="logList"></div>
+    </div>
+
+    <div class="row-actions">
+      <button class="danger" id="deleteBtn" onclick="deleteLead()">ลบ Lead</button>
+      <span style="flex:1"></span>
+      <button onclick="closeModal()">ปิด</button>
+      <button class="primary" onclick="saveLead()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- Data ----------
+const STORE_KEY = 'leadTracker.v1';
+const BACKUP_KEY = 'leadTracker.lastBackup';
+const STATUSES = [
+  { id: 'new',        label: 'ใหม่' },
+  { id: 'contacted',  label: 'ติดต่อแล้ว' },
+  { id: 'interested', label: 'สนใจ' },
+  { id: 'proposal',   label: 'เสนอราคา/ต่อรอง' },
+  { id: 'won',        label: 'ปิดการขายได้' },
+  { id: 'lost',       label: 'ไม่สนใจ/ปิดไม่ได้' },
+];
+const ACTIVE = s => s !== 'won' && s !== 'lost';
+const statusLabel = id => (STATUSES.find(s => s.id === id) || STATUSES[0]).label;
+
+let leads = load();
+let currentId = null;
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch { return []; }
+}
+function persist() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(leads)); }
+  catch (e) { alert('บันทึกไม่สำเร็จ: ' + e.message + '\nกรุณาดาวน์โหลดไฟล์สำรองทันที'); }
+  render();
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = id => document.getElementById(id);
+
+function fmtDate(d) {
+  if (!d) return '';
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+function dateClass(d) {
+  if (!d) return '';
+  const t = today();
+  return d < t ? 'overdue' : d === t ? 'today' : '';
+}
+function daysText(d) {
+  if (!d) return '';
+  const diff = Math.round((new Date(d) - new Date(today())) / 86400000);
+  if (diff < 0) return `เลยมา ${-diff} วัน`;
+  if (diff === 0) return 'วันนี้';
+  if (diff === 1) return 'พรุ่งนี้';
+  return `อีก ${diff} วัน`;
+}
+function lastLog(l) { return (l.logs || [])[0]; }
+
+// ---------- Render ----------
+function render() {
+  renderTodo(); renderLeads(); renderHit(); renderBackupInfo();
+}
+
+function leadItem(l, opts = {}) {
+  const dc = ACTIVE(l.status) ? dateClass(l.nextDate) : '';
+  const last = lastLog(l);
+  return `<div class="item ${dc}" onclick="openLead('${l.id}')">
+    <div class="main">
+      <div><span class="name">${esc(l.name)}</span> ${l.company ? `<span class="muted">· ${esc(l.company)}</span>` : ''}
+        <span class="pill s-${l.status}">${statusLabel(l.status)}</span></div>
+      ${l.nextAction || l.nextDate ? `<div>🎯 ${esc(l.nextAction || '(ยังไม่ระบุ)')}
+        ${l.nextDate ? `<span class="${dc ? 'date-' + dc : 'muted'}"> — ${fmtDate(l.nextDate)} (${daysText(l.nextDate)})</span>` : ''}</div>`
+        : (ACTIVE(l.status) ? `<div class="date-today">⚠️ ยังไม่ได้ตั้งสิ่งที่ต้องทำต่อ</div>` : '')}
+      ${last ? `<div class="muted" style="font-size:13px">คุยล่าสุด ${fmtDate(last.date)}: ${esc(last.text).slice(0, 120)}</div>` : ''}
+    </div>
+    <div style="text-align:right">
+      ${l.phone ? `<a class="btn small" href="tel:${esc(l.phone)}" onclick="event.stopPropagation()">📞 ${esc(l.phone)}</a>` : '<span class="muted">ไม่มีเบอร์</span>'}
+    </div>
+  </div>`;
+}
+
+function renderTodo() {
+  const active = leads.filter(l => ACTIVE(l.status));
+  const t = today();
+  const overdue = active.filter(l => l.nextDate && l.nextDate < t).sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+  const todayL = active.filter(l => l.nextDate === t);
+  const week = new Date(t); week.setUTCDate(week.getUTCDate() + 7);
+  const weekStr = week.toISOString().slice(0, 10);
+  const upcoming = active.filter(l => l.nextDate && l.nextDate > t && l.nextDate <= weekStr).sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+  const noNext = active.filter(l => !l.nextDate);
+
+  const counts = STATUSES.map(s => ({ ...s, n: leads.filter(l => l.status === s.id).length }));
+  $('stats').innerHTML = counts.map(s =>
+    `<div class="stat" onclick="goStatus('${s.id}')"><b>${s.n}</b><span class="pill s-${s.id}">${s.label}</span></div>`).join('');
+
+  const urgent = overdue.length + todayL.length;
+  $('todoBadge').innerHTML = urgent ? `<span class="badge">${urgent}</span>` : '';
+
+  const block = (title, arr) => arr.length ? `<div class="section-title">${title} (${arr.length})</div>${arr.map(l => leadItem(l)).join('')}` : '';
+  const html = block('🔴 เลยกำหนดแล้ว', overdue) + block('🟠 ต้องทำวันนี้', todayL) +
+               block('🔵 ภายใน 7 วัน', upcoming) + block('⚪ ยังไม่ได้ตั้งวันทำต่อ', noNext);
+  $('todoList').innerHTML = html || `<div class="empty">ไม่มีงานค้าง 🎉<br>กด "+ เพิ่ม Lead" เพื่อเริ่มต้น</div>`;
+}
+
+function renderLeads() {
+  const q = $('search').value.trim().toLowerCase();
+  const sf = $('statusFilter').value;
+  const sort = $('sortBy').value;
+  let arr = leads.filter(l => !sf || l.status === sf).filter(l => !q ||
+    [l.name, l.company, l.phone, l.email, l.notes, l.nextAction, l.source, ...(l.logs || []).map(x => x.text)]
+      .join(' ').toLowerCase().includes(q));
+  arr.sort((a, b) => {
+    if (sort === 'name') return a.name.localeCompare(b.name, 'th');
+    if (sort === 'updated') return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+    return (a.nextDate || '9999').localeCompare(b.nextDate || '9999');
+  });
+  $('leadList').innerHTML = arr.length ? arr.map(l => leadItem(l)).join('') : `<div class="empty">ไม่พบ Lead</div>`;
+}
+
+function renderHit() {
+  const f = $('hitFilter').value;
+  const noPhone = leads.filter(l => !l.phone && ACTIVE(l.status));
+  $('hitBadge').innerHTML = noPhone.length ? `<span class="badge" style="background:var(--muted)">${noPhone.length}</span>` : '';
+  const arr = noPhone.filter(l => f === 'all' ? true : f === 'notfound' ? (l.hitAttempts || 0) >= 3 : (l.hitAttempts || 0) < 3)
+                     .sort((a, b) => (a.hitAttempts || 0) - (b.hitAttempts || 0));
+  $('hitList').innerHTML = arr.length ? arr.map(l => {
+    const query = encodeURIComponent([l.company || l.name, 'เบอร์โทร'].join(' '));
+    const site = l.website ? (l.website.startsWith('http') ? l.website : 'https://' + l.website) : '';
+    return `<div class="hit-row">
+      <div>
+        <span class="name"><b>${esc(l.name)}</b></span> ${l.company ? `<span class="muted">· ${esc(l.company)}</span>` : ''}
+        <div class="muted" style="font-size:13px">ลองหาแล้ว ${l.hitAttempts || 0} ครั้ง${l.hitNote ? ' · ' + esc(l.hitNote) : ''}</div>
+      </div>
+      <div class="hit-actions">
+        <a class="btn small" target="_blank" rel="noopener" href="https://www.google.com/search?q=${query}">🔍 ค้น Google</a>
+        ${site ? `<a class="btn small" target="_blank" rel="noopener" href="${esc(site)}">🌐 เว็บไซต์</a>` : ''}
+        <input id="hp-${l.id}" placeholder="วางเบอร์ที่หาได้" inputmode="tel" onkeydown="if(event.key==='Enter')savePhone('${l.id}')">
+        <button class="small primary" onclick="savePhone('${l.id}')">บันทึก</button>
+        <button class="small" onclick="hitMiss('${l.id}')">หาไม่เจอ +1</button>
+        <button class="small" onclick="openLead('${l.id}')">รายละเอียด</button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty">ไม่มีรายชื่อในกลุ่มนี้</div>`;
+}
+
+function renderBackupInfo() {
+  const last = localStorage.getItem(BACKUP_KEY);
+  $('backupInfo').textContent = `มี Lead ทั้งหมด ${leads.length} รายการ · สำรองล่าสุด: ${last ? new Date(last).toLocaleString('th-TH') : 'ยังไม่เคยสำรอง'}`;
+  const days = last ? (Date.now() - new Date(last)) / 86400000 : Infinity;
+  const w = $('backupWarn');
+  if (leads.length && days > 7) {
+    w.style.display = 'block';
+    w.innerHTML = `⚠️ ${last ? `ไม่ได้สำรองข้อมูลมา ${Math.floor(days)} วันแล้ว` : 'ยังไม่เคยสำรองข้อมูล'} — <a href="#" onclick="exportJSON();return false">กดที่นี่เพื่อดาวน์โหลดไฟล์สำรอง</a>`;
+  } else w.style.display = 'none';
+}
+
+// ---------- Tabs ----------
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  ['todo', 'leads', 'hit', 'backup'].forEach(t => $('tab-' + t).hidden = t !== name);
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function goStatus(id) { $('statusFilter').value = id; showTab('leads'); renderLeads(); }
+
+// ---------- Lead modal ----------
+const FIELDS = ['name', 'company', 'phone', 'email', 'website', 'source', 'status', 'value', 'next', 'nextDate', 'notes'];
+function openLead(id) {
+  currentId = id || null;
+  const l = leads.find(x => x.id === id) || { status: 'new' };
+  $('modalTitle').textContent = id ? '✏️ ' + l.name : '➕ เพิ่ม Lead ใหม่';
+  FIELDS.forEach(f => $('f-' + f).value = (f === 'next' ? l.nextAction : l[f]) || '');
+  $('f-status').value = l.status || 'new';
+  $('deleteBtn').style.display = id ? '' : 'none';
+  $('logSection').style.display = id ? '' : 'none';
+  $('l-date').value = today(); $('l-text').value = ''; $('l-next').value = ''; $('l-nextDate').value = ''; $('l-status').value = '';
+  renderLogs(l);
+  $('leadModal').classList.add('open');
+  setTimeout(() => $(id ? 'l-text' : 'f-name').focus(), 50);
+}
+function closeModal() { $('leadModal').classList.remove('open'); currentId = null; }
+$('leadModal').addEventListener('click', e => { if (e.target.id === 'leadModal') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function readForm(target) {
+  FIELDS.forEach(f => {
+    const v = $('f-' + f).value.trim();
+    if (f === 'next') target.nextAction = v; else target[f] = v;
+  });
+}
+function saveLead(silent) {
+  if (!$('f-name').value.trim()) { alert('กรุณาใส่ชื่อผู้ติดต่อ'); return false; }
+  const now = new Date().toISOString();
+  if (currentId) {
+    const l = leads.find(x => x.id === currentId); readForm(l); l.updatedAt = now;
+  } else {
+    const l = { id: uid(), logs: [], createdAt: now, updatedAt: now, hitAttempts: 0 }; readForm(l);
+    leads.push(l); currentId = l.id;
+  }
+  persist();
+  if (!silent) { toast('บันทึกแล้ว'); closeModal(); }
+  return true;
+}
+function deleteLead() {
+  const l = leads.find(x => x.id === currentId);
+  if (!l || !confirm(`ลบ "${l.name}" และ Log ทั้งหมด? (กู้คืนไม่ได้)`)) return;
+  leads = leads.filter(x => x.id !== currentId); closeModal(); persist(); toast('ลบแล้ว');
+}
+
+// ---------- Logs ----------
+function renderLogs(l) {
+  const logs = l.logs || [];
+  $('logList').innerHTML = logs.length ? logs.map(g => `<div class="log">
+      <div class="meta">${fmtDate(g.date)} · ${esc(g.type)}${g.statusChange ? ` · เปลี่ยนสถานะ → ${statusLabel(g.statusChange)}` : ''}
+        <a href="#" class="danger" style="margin-left:6px" onclick="delLog('${g.id}');return false">ลบ</a></div>
+      <div style="white-space:pre-wrap">${esc(g.text)}</div>
+      ${g.next ? `<div class="next">🎯 ต่อไป: ${esc(g.next)}${g.nextDate ? ' — ' + fmtDate(g.nextDate) : ''}</div>` : ''}
+    </div>`).join('') : `<div class="muted">ยังไม่มีบันทึก</div>`;
+}
+function addLog() {
+  const text = $('l-text').value.trim();
+  if (!text) { alert('กรุณาเขียนว่าคุยอะไรกัน'); return; }
+  if (!saveLead(true)) return;          // keep any edits made to the form above
+  const l = leads.find(x => x.id === currentId);
+  const g = { id: uid(), date: $('l-date').value || today(), type: $('l-type').value, text,
+              next: $('l-next').value.trim(), nextDate: $('l-nextDate').value, statusChange: $('l-status').value };
+  l.logs = [g, ...(l.logs || [])].sort((a, b) => b.date.localeCompare(a.date));
+  if (g.next || g.nextDate) { l.nextAction = g.next; l.nextDate = g.nextDate; }
+  if (g.statusChange) l.status = g.statusChange;
+  else if (l.status === 'new') l.status = 'contacted';
+  l.updatedAt = new Date().toISOString();
+  persist(); toast('บันทึก Log แล้ว');
+  openLead(l.id);
+}
+function delLog(logId) {
+  const l = leads.find(x => x.id === currentId);
+  if (!confirm('ลบ Log นี้?')) return;
+  l.logs = l.logs.filter(g => g.id !== logId); persist(); renderLogs(l);
+}
+
+// ---------- Hit list ----------
+function savePhone(id) {
+  const v = $('hp-' + id).value.trim();
+  if (!v) { alert('กรุณาวางเบอร์โทร'); return; }
+  const l = leads.find(x => x.id === id);
+  l.phone = v; l.updatedAt = new Date().toISOString();
+  if (!l.nextAction) { l.nextAction = 'โทรแนะนำตัวครั้งแรก'; l.nextDate = today(); }
+  persist(); toast(`บันทึกเบอร์ ${l.name} แล้ว → ไปอยู่ในรายการต้องทำ`);
+}
+function hitMiss(id) {
+  const l = leads.find(x => x.id === id);
+  const note = prompt('ลองหาที่ไหนแล้วบ้าง? (ไม่บังคับ)', l.hitNote || '');
+  if (note === null) return;
+  l.hitAttempts = (l.hitAttempts || 0) + 1; l.hitNote = note.trim(); l.updatedAt = new Date().toISOString();
+  persist();
+}
+function bulkAdd() {
+  const lines = $('bulkInput').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return;
+  const now = new Date().toISOString();
+  lines.forEach(line => {
+    const [name, company = '', website = ''] = line.split(/[,\t]/).map(s => s.trim());
+    leads.push({ id: uid(), name: name || company, company, website, phone: '', email: '', source: 'Hit List',
+                 status: 'new', value: '', nextAction: '', nextDate: '', notes: '', logs: [],
+                 hitAttempts: 0, createdAt: now, updatedAt: now });
+  });
+  $('bulkInput').value = ''; persist(); toast(`เพิ่ม ${lines.length} รายชื่อแล้ว`);
+}
+
+// ---------- Backup ----------
+function download(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function exportJSON() {
+  download(`leads-backup-${today()}.json`, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), leads }, null, 2), 'application/json');
+  localStorage.setItem(BACKUP_KEY, new Date().toISOString()); renderBackupInfo();
+}
+function exportCSV() {
+  const cols = ['name', 'company', 'phone', 'email', 'website', 'source', 'status', 'value', 'nextAction', 'nextDate', 'notes'];
+  const head = ['ชื่อ', 'บริษัท', 'เบอร์', 'อีเมล/LINE', 'เว็บไซต์', 'แหล่งที่มา', 'สถานะ', 'มูลค่า', 'ต้องทำต่อ', 'วันที่', 'โน้ต', 'คุยล่าสุด', 'Log ทั้งหมด'];
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = leads.map(l => [...cols.map(c => c === 'status' ? statusLabel(l.status) : l[c]),
+    lastLog(l)?.date || '', (l.logs || []).map(g => `[${g.date}] ${g.text}`).join(' | ')].map(q).join(','));
+  download(`leads-${today()}.csv`, '﻿' + [head.map(q).join(','), ...rows].join('\r\n'), 'text/csv;charset=utf-8');
+}
+function importJSON(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(r.result);
+      const arr = Array.isArray(data) ? data : data.leads;
+      if (!Array.isArray(arr)) throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');
+      const mode = leads.length ? confirm(`ไฟล์มี ${arr.length} รายการ\n\nกด OK = รวมกับข้อมูลเดิม (รายการ id ซ้ำจะใช้ของในไฟล์)\nกด Cancel = ยกเลิก`) : true;
+      if (!mode) return;
+      const map = new Map(leads.map(l => [l.id, l]));
+      arr.forEach(l => { if (l && l.id && l.name) map.set(l.id, { logs: [], ...l }); });
+      leads = [...map.values()]; persist(); toast(`นำเข้าแล้ว ${arr.length} รายการ`);
+    } catch (err) { alert('นำเข้าไม่สำเร็จ: ' + err.message); }
+    e.target.value = '';
+  };
+  r.readAsText(file);
+}
+
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2200); }
+
+// ---------- Init ----------
+STATUSES.forEach(s => {
+  ['f-status', 'l-status', 'statusFilter'].forEach(id => $(id).insertAdjacentHTML('beforeend', `<option value="${s.id}">${s.label}</option>`));
+});
+['search', 'statusFilter', 'sortBy'].forEach(id => $(id).addEventListener('input', renderLeads));
+$('hitFilter').addEventListener('input', renderHit);
+render();
+</script>
+</body>
+</html>

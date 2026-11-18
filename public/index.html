@@ -122,6 +122,15 @@
 
 <main>
   <div class="warnbar" id="backupWarn"></div>
+  <div class="card" id="seedCard" style="display:none;border-color:var(--primary)">
+    <b>🔐 มีข้อมูลลูกค้าเตรียมไว้ให้แล้ว</b>
+    <p class="muted" style="margin:4px 0 10px">ใส่รหัสผ่านเพื่อโหลดข้อมูลเข้าโปรแกรม (ทำครั้งเดียวต่อเครื่อง / เบราว์เซอร์) — รายการที่มีอยู่แล้วจะไม่ถูกเพิ่มซ้ำ</p>
+    <div class="toolbar" style="margin:0">
+      <input id="seedPass" type="password" placeholder="รหัสผ่าน" autocomplete="off" onkeydown="if(event.key==='Enter')loadSeed()" style="flex:0 1 260px">
+      <button class="primary" id="seedBtn" onclick="loadSeed()">โหลดข้อมูล</button>
+      <button onclick="$('seedCard').style.display='none'">ปิด</button>
+    </div>
+  </div>
 
   <!-- TAB: TODO -->
   <section id="tab-todo">
@@ -181,6 +190,7 @@
       <b>🔍 ตรวจหารายการซ้ำในระบบ</b>
       <p class="muted" style="margin:4px 0 10px">เทียบ อีเมล / เบอร์ / LINE / ชื่อที่คล้ายกัน (เช่น "ABC Co., Ltd." กับ "บริษัท ABC จำกัด") แล้วเลือกรวมเป็นรายการเดียว — ประวัติการคุยของทั้งสองรายการจะถูกรวมไว้ ไม่หาย</p>
       <button onclick="scanDuplicates()">🔍 ตรวจหารายการซ้ำ</button>
+      <button onclick="$('seedCard').style.display='';window.scrollTo(0,0);$('seedPass').focus()">🔐 โหลดข้อมูลที่เตรียมไว้ (ใช้รหัสผ่าน)</button>
       <div id="dupResult" style="margin-top:10px"></div>
     </div>
     <div class="card" id="outlookCard">
@@ -951,6 +961,31 @@ function mergeInto(ex, r) {               // fill/extend an existing lead with d
   ex.updatedAt = new Date().toISOString();
 }
 
+// ---------- Pre-loaded data (encrypted: the repo/site are public, customer data must not be readable) ----------
+const SEED_KEY = 'leadTracker.seedLoaded';
+async function loadSeed() {
+  const pass = $('seedPass').value; if (!pass) { alert('กรุณาใส่รหัสผ่าน'); return; }
+  if (!window.crypto?.subtle) { alert('ต้องเปิดผ่านเว็บ (https) จึงจะถอดรหัสได้'); return; }
+  $('seedBtn').disabled = true; $('seedBtn').textContent = 'กำลังถอดรหัส…';
+  try {
+    const r = await fetch('seed.enc.json', { cache: 'no-store' }); if (!r.ok) throw new Error('ไม่พบไฟล์ข้อมูล');
+    const f = await r.json(), b = x => Uint8Array.from(atob(x), c => c.charCodeAt(0));
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass.trim()), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b(f.salt), iterations: f.iter, hash: 'SHA-256' }, base,
+                                              { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    let plain;
+    try { plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b(f.iv) }, key, b(f.ct)); }
+    catch { throw new Error('รหัสผ่านไม่ถูกต้อง'); }
+    const data = JSON.parse(new TextDecoder().decode(plain)).leads || [];
+    const ids = new Set(leads.map(l => l.id)); let n = 0;
+    data.forEach(l => { if (l && l.id && !ids.has(l.id)) { leads.push(l); n++; } });
+    try { localStorage.setItem(SEED_KEY, '1'); } catch {}
+    $('seedPass').value = ''; $('seedCard').style.display = 'none'; persist();
+    toast(`โหลดข้อมูลแล้ว ${n} รายการ${data.length - n ? ` (มีอยู่แล้ว ${data.length - n})` : ''}`);
+  } catch (e) { alert(e.message); }
+  $('seedBtn').disabled = false; $('seedBtn').textContent = 'โหลดข้อมูล';
+}
+
 const NOTDUP_KEY = 'leadTracker.notDup';
 function notDupSet() { try { return new Set(JSON.parse(localStorage.getItem(NOTDUP_KEY)) || []); } catch { return new Set(); } }
 function scanDuplicates() {
@@ -1146,6 +1181,10 @@ $('viewMode').addEventListener('input', () => { try { localStorage.setItem('lead
 $('hitFilter').addEventListener('input', renderHit);
 render();
 renderOutlookSettings();
+(() => { let done = false; try { done = !!localStorage.getItem(SEED_KEY); } catch {}
+  if (!done && !leads.length && location.protocol.startsWith('http'))
+    fetch('seed.enc.json', { method: 'HEAD', cache: 'no-store' }).then(r => { if (r.ok) $('seedCard').style.display = ''; }).catch(() => {});
+})();
 if (msCfg.clientId && location.protocol !== 'file:') msInit().then(renderOutlookSettings).catch(() => {});
 </script>
 </body>

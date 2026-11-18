@@ -90,6 +90,17 @@
            padding: 8px 16px; border-radius: 8px; display: none; z-index: 30; }
   .warnbar { background: var(--warn-weak); color: var(--warn); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px;
              display: none; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table.lt { border-collapse: collapse; width: 100%; font-size: 14px; }
+  table.lt th, table.lt td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.lt th { background: var(--bg); color: var(--muted); font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
+  table.lt tbody tr { cursor: pointer; }
+  table.lt tbody tr:hover { background: var(--primary-weak); }
+  table.lt td.wrap { min-width: 180px; max-width: 320px; }
+  tr.overdue td:first-child { box-shadow: inset 4px 0 var(--danger); }
+  tr.today td:first-child { box-shadow: inset 4px 0 var(--warn); }
+  .map-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 12px; }
+  .tag-new { color: var(--ok); font-weight: 600; } .tag-upd { color: var(--primary); font-weight: 600; }
   @media (max-width: 600px) { .hit-row { grid-template-columns: 1fr; } .hit-actions input { flex: 1; width: auto; } }
 </style>
 </head>
@@ -124,6 +135,12 @@
         <option value="updated">เรียงตาม: อัปเดตล่าสุด</option>
         <option value="name">เรียงตาม: ชื่อ</option>
       </select>
+      <select id="viewMode">
+        <option value="table">มุมมอง: ตาราง</option>
+        <option value="cards">มุมมอง: การ์ด</option>
+      </select>
+      <button onclick="pickExcel()">📥 นำเข้า Excel</button>
+      <button onclick="exportExcel()">📤 ส่งออก Excel</button>
     </div>
     <div id="leadList"></div>
   </section>
@@ -159,7 +176,9 @@
       <p class="muted">ถ้าล้างประวัติเบราว์เซอร์ หรือเปลี่ยนเครื่อง ข้อมูลจะหาย — กรุณากด "ดาวน์โหลดไฟล์สำรอง" อย่างน้อยสัปดาห์ละครั้ง แล้วเก็บไฟล์ไว้ (เช่น Google Drive)</p>
       <div class="toolbar">
         <button class="primary" onclick="exportJSON()">⬇️ ดาวน์โหลดไฟล์สำรอง (.json)</button>
-        <button onclick="exportCSV()">⬇️ ส่งออกเป็น Excel (.csv)</button>
+        <button onclick="exportExcel()">📤 ส่งออก Excel (.xlsx)</button>
+        <button onclick="pickExcel()">📥 นำเข้า Excel / CSV</button>
+        <button onclick="downloadTemplate()">📄 ไฟล์ Excel ตัวอย่าง</button>
         <label class="btn" style="margin:0;color:var(--text);font-size:15px">⬆️ นำเข้าไฟล์สำรอง
           <input type="file" accept=".json" onchange="importJSON(event)" hidden>
         </label>
@@ -216,6 +235,19 @@
       <span style="flex:1"></span>
       <button onclick="closeModal()">ปิด</button>
       <button class="primary" onclick="saveLead()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT EXCEL MODAL -->
+<input type="file" id="excelFile" accept=".xlsx,.xls,.csv" hidden onchange="readExcel(event)">
+<div class="overlay" id="importModal">
+  <div class="modal" style="max-width:1000px">
+    <h2>📥 นำเข้าจาก Excel</h2>
+    <div id="imp-body"></div>
+    <div class="row-actions">
+      <button onclick="closeImport()">ยกเลิก</button>
+      <button class="primary" id="imp-go" onclick="doImport()">นำเข้า</button>
     </div>
   </div>
 </div>
@@ -331,7 +363,22 @@ function renderLeads() {
     if (sort === 'updated') return (b.updatedAt || '').localeCompare(a.updatedAt || '');
     return (a.nextDate || '9999').localeCompare(b.nextDate || '9999');
   });
-  $('leadList').innerHTML = arr.length ? arr.map(l => leadItem(l)).join('') : `<div class="empty">ไม่พบ Lead</div>`;
+  if (!arr.length) { $('leadList').innerHTML = `<div class="empty">ไม่พบ Lead</div>`; return; }
+  if ($('viewMode').value === 'cards') { $('leadList').innerHTML = arr.map(l => leadItem(l)).join(''); return; }
+  $('leadList').innerHTML = `<div class="table-wrap"><table class="lt">
+    <thead><tr><th>ลูกค้า</th><th>สถานะ</th><th>ทำอะไรอยู่ (คุยล่าสุด)</th><th>ต้องทำอะไรต่อ</th><th>ภายในวันที่</th><th>เบอร์</th></tr></thead>
+    <tbody>${arr.map(l => {
+      const dc = ACTIVE(l.status) ? dateClass(l.nextDate) : '';
+      const last = lastLog(l);
+      return `<tr class="${dc}" onclick="openLead('${l.id}')">
+        <td><b>${esc(l.name)}</b>${l.company ? `<div class="muted">${esc(l.company)}</div>` : ''}</td>
+        <td><span class="pill s-${l.status}">${statusLabel(l.status)}</span></td>
+        <td class="wrap">${last ? `<span class="muted">${fmtDate(last.date)}</span> ${esc(last.text).slice(0, 160)}` : '<span class="muted">—</span>'}</td>
+        <td class="wrap">${l.nextAction ? esc(l.nextAction) : (ACTIVE(l.status) ? '<span class="date-today">⚠️ ยังไม่ได้ตั้ง</span>' : '<span class="muted">—</span>')}</td>
+        <td style="white-space:nowrap">${l.nextDate ? `<span class="${dc ? 'date-' + dc : ''}">${fmtDate(l.nextDate)}</span><div class="muted" style="font-size:12px">${daysText(l.nextDate)}</div>` : '<span class="muted">—</span>'}</td>
+        <td style="white-space:nowrap">${l.phone ? `<a href="tel:${esc(l.phone)}" onclick="event.stopPropagation()">${esc(l.phone)}</a>` : '<span class="muted">ไม่มี</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
 }
 
 function renderHit() {
@@ -396,7 +443,7 @@ function openLead(id) {
 }
 function closeModal() { $('leadModal').classList.remove('open'); currentId = null; }
 $('leadModal').addEventListener('click', e => { if (e.target.id === 'leadModal') closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeImport(); } });
 
 function readForm(target) {
   FIELDS.forEach(f => {
@@ -493,14 +540,226 @@ function exportJSON() {
   download(`leads-backup-${today()}.json`, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), leads }, null, 2), 'application/json');
   localStorage.setItem(BACKUP_KEY, new Date().toISOString()); renderBackupInfo();
 }
-function exportCSV() {
-  const cols = ['name', 'company', 'phone', 'email', 'website', 'source', 'status', 'value', 'nextAction', 'nextDate', 'notes'];
-  const head = ['ชื่อ', 'บริษัท', 'เบอร์', 'อีเมล/LINE', 'เว็บไซต์', 'แหล่งที่มา', 'สถานะ', 'มูลค่า', 'ต้องทำต่อ', 'วันที่', 'โน้ต', 'คุยล่าสุด', 'Log ทั้งหมด'];
-  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = leads.map(l => [...cols.map(c => c === 'status' ? statusLabel(l.status) : l[c]),
-    lastLog(l)?.date || '', (l.logs || []).map(g => `[${g.date}] ${g.text}`).join(' | ')].map(q).join(','));
-  download(`leads-${today()}.csv`, '﻿' + [head.map(q).join(','), ...rows].join('\r\n'), 'text/csv;charset=utf-8');
+// ---------- Excel (import / export) ----------
+let xlsxLoading = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  return xlsxLoading ||= new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = 'vendor/xlsx.full.min.js';
+    sc.onload = res; sc.onerror = () => { xlsxLoading = null; rej(new Error('โหลดตัวอ่าน Excel ไม่สำเร็จ')); };
+    document.head.appendChild(sc);
+  });
 }
+const pad = n => String(n).padStart(2, '0');
+const EXPORT_HEAD = ['ชื่อ', 'บริษัท', 'เบอร์โทร', 'อีเมล/LINE', 'เว็บไซต์', 'แหล่งที่มา', 'สถานะ', 'มูลค่า',
+                     'ทำอะไรอยู่ (คุยล่าสุด)', 'วันที่คุยล่าสุด', 'ต้องทำต่อ', 'ภายในวันที่', 'โน้ต'];
+async function exportExcel() {
+  try { await loadXLSX(); } catch (e) { alert(e.message); return; }
+  const rows = leads.map(l => { const g = lastLog(l); return [l.name, l.company, l.phone, l.email, l.website, l.source,
+    statusLabel(l.status), l.value, g?.text || '', g?.date || '', l.nextAction, l.nextDate, l.notes]; });
+  const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD, ...rows]);
+  ws['!cols'] = [18, 20, 14, 18, 18, 12, 14, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
+  const logRows = [];
+  leads.forEach(l => (l.logs || []).forEach(g => logRows.push([l.name, l.company, g.date, g.type, g.text, g.next, g.nextDate])));
+  const ws2 = XLSX.utils.aoa_to_sheet([['ชื่อ', 'บริษัท', 'วันที่คุย', 'ช่องทาง', 'คุยอะไร', 'ขั้นต่อไป', 'ภายในวันที่'], ...logRows]);
+  ws2['!cols'] = [18, 20, 12, 12, 50, 30, 13].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads'); XLSX.utils.book_append_sheet(wb, ws2, 'ประวัติการคุย');
+  XLSX.writeFile(wb, `leads-${today()}.xlsx`);
+}
+async function downloadTemplate() {
+  try { await loadXLSX(); } catch (e) { alert(e.message); return; }
+  const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD,
+    ['คุณสมชาย', 'บริษัท ABC จำกัด', '0812345678', 'somchai@abc.co.th', 'abc.co.th', 'งานแฟร์', 'สนใจ', 50000,
+     'คุยแล้ว สนใจรุ่น A ขอใบเสนอราคา', '15/11/2026', 'ส่งใบเสนอราคา', '20/11/2026', '']]);
+  ws['!cols'] = [18, 20, 14, 18, 18, 12, 14, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+  XLSX.writeFile(wb, 'lead-template.xlsx');
+}
+
+// Which Excel column goes to which field — guessed from header text, user can change
+const IMPORT_FIELDS = [
+  { key: 'name', label: 'ชื่อลูกค้า / ผู้ติดต่อ *', kw: ['ชื่อลูกค้า', 'ชื่อผู้ติดต่อ', 'ผู้ติดต่อ', 'ชื่อ', 'name', 'contact', 'customer', 'ลูกค้า'] },
+  { key: 'company', label: 'บริษัท', kw: ['บริษัท', 'company', 'องค์กร', 'ร้าน', 'organization', 'organisation'] },
+  { key: 'phone', label: 'เบอร์โทร', kw: ['เบอร์โทร', 'เบอร์', 'โทรศัพท์', 'มือถือ', 'phone', 'tel', 'mobile'] },
+  { key: 'email', label: 'อีเมล / LINE', kw: ['อีเมล', 'email', 'e-mail', 'line', 'ไลน์'] },
+  { key: 'website', label: 'เว็บไซต์', kw: ['เว็บไซต์', 'เว็บ', 'website', 'web', 'url', 'ลิงก์', 'link'] },
+  { key: 'source', label: 'แหล่งที่มา', kw: ['แหล่งที่มา', 'ที่มา', 'source', 'channel'] },
+  { key: 'status', label: 'สถานะ', kw: ['สถานะ', 'status', 'stage'] },
+  { key: 'value', label: 'มูลค่า', kw: ['มูลค่า', 'value', 'amount', 'งบประมาณ', 'ยอด'] },
+  { key: 'current', label: 'ทำอะไรอยู่ / คุยล่าสุด', kw: ['ทำอะไรอยู่', 'คุยล่าสุด', 'ความคืบหน้า', 'อัปเดต', 'อัพเดท', 'update', 'progress', 'last activity', 'รายละเอียดการคุย'] },
+  { key: 'lastDate', label: 'วันที่คุยล่าสุด', kw: ['วันที่คุยล่าสุด', 'วันที่คุย', 'ติดต่อล่าสุด', 'วันที่ติดต่อ', 'last contact'] },
+  { key: 'nextAction', label: 'ต้องทำอะไรต่อ', kw: ['ต้องทำอะไรต่อ', 'ต้องทำต่อ', 'ทำต่อ', 'ขั้นต่อไป', 'สิ่งที่ต้องทำ', 'next step', 'next action', 'to do', 'todo', 'next'] },
+  { key: 'nextDate', label: 'ภายในวันที่', kw: ['ภายในวันที่', 'กำหนดส่ง', 'กำหนด', 'วันนัด', 'due', 'deadline', 'follow up date', 'follow-up date'] },
+  { key: 'notes', label: 'โน้ต / หมายเหตุ', kw: ['หมายเหตุ', 'โน้ต', 'note', 'remark', 'comment'] },
+];
+const STATUS_KW = [ // checked in this order ("ไม่สนใจ" must win over "สนใจ")
+  ['lost', ['ไม่สนใจ', 'ปิดไม่ได้', 'ยกเลิก', 'ไม่ซื้อ', 'lost', 'reject', 'cancel', 'dead']],
+  ['won', ['ปิดการขายได้', 'ปิดได้', 'ปิดการขาย', 'ซื้อแล้ว', 'สำเร็จ', 'won', 'closed', 'deal']],
+  ['proposal', ['เสนอราคา', 'ใบเสนอ', 'ต่อรอง', 'proposal', 'quote', 'quotation', 'negotiat']],
+  ['interested', ['สนใจ', 'interested', 'qualified', 'hot', 'warm']],
+  ['contacted', ['ติดต่อแล้ว', 'ติดต่อ', 'โทรแล้ว', 'คุยแล้ว', 'contacted', 'follow']],
+  ['new', ['ใหม่', 'new', 'lead', 'cold']],
+];
+const norm = v => String(v ?? '').trim().toLowerCase();
+function guessStatus(raw) {
+  const v = norm(raw); if (!v) return '';
+  const exact = STATUSES.find(s => norm(s.label) === v || s.id === v); if (exact) return exact.id;
+  for (const [id, kws] of STATUS_KW) if (kws.some(k => v.includes(k))) return id;
+  return 'new';
+}
+function guessMapping(headers) {
+  const pairs = [];
+  IMPORT_FIELDS.forEach(f => headers.forEach((h, i) => {
+    const hv = norm(h); if (!hv) return;
+    let best = 0;
+    f.kw.forEach(k => { if (hv === k) best = Math.max(best, 100 + k.length); else if (hv.includes(k)) best = Math.max(best, k.length); });
+    if (best) pairs.push({ f: f.key, i, score: best });
+  }));
+  pairs.sort((a, b) => b.score - a.score);
+  const map = {}, used = new Set();
+  pairs.forEach(p => { if (!(p.f in map) && !used.has(p.i)) { map[p.f] = p.i; used.add(p.i); } });
+  return map;
+}
+const TH_MONTHS = ['ม.ค', 'ก.พ', 'มี.ค', 'เม.ย', 'พ.ค', 'มิ.ย', 'ก.ค', 'ส.ค', 'ก.ย', 'ต.ค', 'พ.ย', 'ธ.ค'];
+const TH_MONTHS_FULL = ['มกรา', 'กุมภา', 'มีนา', 'เมษา', 'พฤษภา', 'มิถุนา', 'กรกฎา', 'สิงหา', 'กันยา', 'ตุลา', 'พฤศจิกา', 'ธันวา'];
+function mkDate(y, m, d) {
+  if (y < 100) y += y >= 40 ? 2500 : 2000;      // "69" = พ.ศ. 2569, "26" = ค.ศ. 2026
+  if (y > 2400) y -= 543;                        // พ.ศ. → ค.ศ.
+  if (m < 1 || m > 12 || d < 1 || d > 31) return '';
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+function toISODate(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'number') { const d = XLSX.SSF.parse_date_code(v); return d ? mkDate(d.y, d.m, d.d) : ''; }
+  const s = String(v).trim(); let m;
+  if ((m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/))) return mkDate(+m[1], +m[2], +m[3]);
+  if ((m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/))) return mkDate(+m[3], +m[2], +m[1]);   // วัน/เดือน/ปี
+  if ((m = s.match(/^(\d{1,2})\s*([ก-๙.]+)\s*(\d{2,4})/))) {
+    const t = m[2].replace(/\.$/, ''); let mi = TH_MONTHS.findIndex(x => t.startsWith(x));
+    if (mi < 0) mi = TH_MONTHS_FULL.findIndex(x => t.startsWith(x));
+    if (mi >= 0) return mkDate(+m[3], mi + 1, +m[1]);
+  }
+  return '';
+}
+function cleanPhone(v) {
+  if (typeof v === 'number') { const s = String(v); return (s.length === 8 || s.length === 9) ? '0' + s : s; } // Excel ตัด 0 หน้าเบอร์ทิ้ง
+  return String(v ?? '').trim();
+}
+
+let imp = null;
+function pickExcel() { $('excelFile').value = ''; $('excelFile').click(); }
+async function readExcel(e) {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    await loadXLSX();
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: true });   // raw: CSV ไม่แปลงวันที่แบบอเมริกัน
+    imp = { wb, fileName: file.name, mode: 'update' };
+    loadSheet(wb.SheetNames[0]);
+    $('importModal').classList.add('open');
+  } catch (err) { alert('อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
+}
+function loadSheet(name) {
+  const aoa = XLSX.utils.sheet_to_json(imp.wb.Sheets[name], { header: 1, raw: true, defval: '' });
+  const hIdx = aoa.findIndex(r => r.filter(c => String(c).trim()).length >= 2);   // แถวหัวตาราง = แถวแรกที่มีข้อมูล ≥ 2 ช่อง
+  imp.sheet = name;
+  imp.headers = hIdx >= 0 ? aoa[hIdx].map(h => String(h).trim()) : [];
+  imp.rows = hIdx >= 0 ? aoa.slice(hIdx + 1).filter(r => r.some(c => String(c).trim())) : [];
+  imp.map = guessMapping(imp.headers);
+  imp.statusMap = {};
+  renderImport();
+}
+function cell(r, key) { const i = imp.map[key]; return i === undefined || i === '' ? '' : r[i]; }
+function buildRecords() {
+  return imp.rows.map(r => {
+    const txt = k => String(cell(r, k) ?? '').trim();
+    const rec = { name: txt('name'), company: txt('company'), phone: cleanPhone(cell(r, 'phone')), email: txt('email'),
+      website: txt('website'), source: txt('source'), value: txt('value'), current: txt('current'),
+      nextAction: txt('nextAction'), notes: txt('notes'),
+      lastDate: toISODate(cell(r, 'lastDate')), nextDate: toISODate(cell(r, 'nextDate')) };
+    const rawNext = txt('nextDate');
+    if (rawNext && !rec.nextDate) rec.nextAction = (rec.nextAction + ` (กำหนด: ${rawNext})`).trim();  // วันที่อ่านไม่ออก: เก็บข้อความไว้ไม่ให้หาย
+    const rawStatus = txt('status');
+    rec.status = rawStatus ? (imp.statusMap[rawStatus] || guessStatus(rawStatus)) : (rec.current ? 'contacted' : 'new');
+    if (!rec.name) rec.name = rec.company;
+    return rec;
+  }).filter(r => r.name);
+}
+const dupKey = l => { const d = String(l.phone || '').replace(/\D/g, ''); return d.length >= 8 ? 'p' + d.slice(-9) : 'n' + norm(l.name) + '|' + norm(l.company); };
+function renderImport() {
+  const recs = buildRecords();
+  const existing = new Set(leads.map(dupKey));
+  const rawStatuses = imp.map.status === undefined ? [] : [...new Set(imp.rows.map(r => String(r[imp.map.status] ?? '').trim()).filter(Boolean))];
+  const opt = (v, sel, label) => `<option value="${esc(v)}" ${String(sel) === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
+  const colOpts = sel => opt('', sel ?? '', '— ไม่ใช้ —') + imp.headers.map((h, i) => opt(i, sel ?? '', h || `(คอลัมน์ ${i + 1})`)).join('');
+  const nNew = recs.filter(r => !existing.has(dupKey(r))).length;
+  $('imp-body').innerHTML = `
+    <div class="toolbar">
+      <span>ไฟล์: <b>${esc(imp.fileName)}</b></span>
+      ${imp.wb.SheetNames.length > 1 ? `<select onchange="loadSheet(this.value)" style="flex:0 1 220px">${imp.wb.SheetNames.map(n => opt(n, imp.sheet, 'ชีต: ' + n)).join('')}</select>` : ''}
+      <span class="muted">พบ ${imp.rows.length} แถว</span>
+    </div>
+    <div class="section-title">1) จับคู่คอลัมน์ใน Excel กับข้อมูลในโปรแกรม <span class="muted" style="font-weight:400">(เดาให้แล้ว ตรวจสอบ/แก้ได้)</span></div>
+    <div class="map-grid">${IMPORT_FIELDS.map(f => `<div><label>${f.label}</label>
+      <select onchange="imp.map['${f.key}']=this.value===''?undefined:+this.value; if('${f.key}'==='status') imp.statusMap={}; renderImport()">${colOpts(imp.map[f.key])}</select></div>`).join('')}</div>
+    ${rawStatuses.length ? `<div class="section-title">2) สถานะใน Excel → สถานะในโปรแกรม</div>
+      <div class="map-grid">${rawStatuses.map(v => `<div><label>"${esc(v)}"</label>
+        <select onchange="imp.statusMap[${esc(JSON.stringify(v))}]=this.value; renderImport()">${STATUSES.map(s => opt(s.id, imp.statusMap[v] || guessStatus(v), s.label)).join('')}</select></div>`).join('')}</div>` : ''}
+    <div class="section-title">${rawStatuses.length ? 3 : 2}) ถ้าลูกค้าซ้ำกับที่มีอยู่แล้ว (เบอร์เดียวกัน หรือ ชื่อ+บริษัทเดียวกัน)</div>
+    <div class="toolbar">
+      <select onchange="imp.mode=this.value; renderImport()" style="flex:0 1 420px">
+        ${opt('update', imp.mode, 'อัปเดตรายการเดิม (สถานะ / ต้องทำต่อ / เพิ่มบันทึกการคุย)')}
+        ${opt('skip', imp.mode, 'ข้าม ไม่แตะรายการเดิม')}
+        ${opt('add', imp.mode, 'เพิ่มเป็นรายการใหม่ทั้งหมด')}
+      </select>
+    </div>
+    <div class="section-title">ตัวอย่างที่จะนำเข้า (${recs.length} รายการ: ใหม่ ${nNew}, ซ้ำ ${recs.length - nNew})</div>
+    ${!imp.map.hasOwnProperty('name') || imp.map.name === undefined ? '<div class="warnbar" style="display:block">⚠️ ยังไม่ได้เลือกคอลัมน์ "ชื่อลูกค้า" — ระบบจะใช้ชื่อบริษัทแทน</div>' : ''}
+    <div class="table-wrap" style="max-height:340px;overflow:auto"><table class="lt">
+      <thead><tr><th></th><th>ลูกค้า</th><th>สถานะ</th><th>ทำอะไรอยู่</th><th>ต้องทำอะไรต่อ</th><th>ภายในวันที่</th><th>เบอร์</th></tr></thead>
+      <tbody>${recs.slice(0, 100).map(r => `<tr style="cursor:default">
+        <td>${existing.has(dupKey(r)) ? `<span class="tag-upd">ซ้ำ</span>` : `<span class="tag-new">ใหม่</span>`}</td>
+        <td><b>${esc(r.name)}</b>${r.company && r.company !== r.name ? `<div class="muted">${esc(r.company)}</div>` : ''}</td>
+        <td><span class="pill s-${r.status}">${statusLabel(r.status)}</span></td>
+        <td class="wrap">${r.lastDate ? `<span class="muted">${fmtDate(r.lastDate)}</span> ` : ''}${esc(r.current) || '<span class="muted">—</span>'}</td>
+        <td class="wrap">${esc(r.nextAction) || '<span class="muted">—</span>'}</td>
+        <td>${r.nextDate ? fmtDate(r.nextDate) : '<span class="muted">—</span>'}</td>
+        <td>${esc(r.phone) || '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody>
+    </table></div>
+    ${recs.length > 100 ? `<div class="muted">แสดง 100 แถวแรก</div>` : ''}`;
+  $('imp-go').textContent = `นำเข้า ${recs.length} รายการ`;
+  $('imp-go').disabled = !recs.length;
+}
+function closeImport() { $('importModal').classList.remove('open'); imp = null; }
+function doImport() {
+  const recs = buildRecords(); if (!recs.length) return;
+  const now = new Date().toISOString();
+  const byKey = new Map(leads.map(l => [dupKey(l), l]));
+  let added = 0, updated = 0, skipped = 0;
+  const logOf = r => r.current ? [{ id: uid(), date: r.lastDate || today(), type: '📥 นำเข้าจาก Excel', text: r.current,
+                                    next: r.nextAction, nextDate: r.nextDate, statusChange: '' }] : [];
+  recs.forEach(r => {
+    const ex = imp.mode !== 'add' && byKey.get(dupKey(r));
+    if (ex && imp.mode === 'skip') { skipped++; return; }
+    if (ex) {
+      ['company', 'phone', 'email', 'website', 'source', 'value', 'notes'].forEach(k => { if (r[k]) ex[k] = r[k]; });
+      if (imp.map.status !== undefined && r.status) ex.status = r.status;
+      if (r.nextAction || r.nextDate) { ex.nextAction = r.nextAction; ex.nextDate = r.nextDate; }
+      const prev = (ex.logs || []).map(g => g.text);
+      if (r.current && !prev.includes(r.current)) ex.logs = [...logOf(r), ...(ex.logs || [])].sort((a, b) => b.date.localeCompare(a.date));
+      ex.updatedAt = now; updated++;
+    } else {
+      const l = { id: uid(), name: r.name, company: r.company, phone: r.phone, email: r.email, website: r.website,
+                  source: r.source, status: r.status, value: r.value, nextAction: r.nextAction, nextDate: r.nextDate,
+                  notes: r.notes, logs: logOf(r), hitAttempts: 0, createdAt: now, updatedAt: now };
+      leads.push(l); byKey.set(dupKey(l), l); added++;
+    }
+  });
+  closeImport(); persist();
+  $('statusFilter').value = ''; $('search').value = ''; showTab('leads'); renderLeads();
+  toast(`นำเข้าแล้ว: ใหม่ ${added}, อัปเดต ${updated}${skipped ? `, ข้าม ${skipped}` : ''}`);
+}
+$('importModal').addEventListener('click', e => { if (e.target.id === 'importModal') closeImport(); });
 function importJSON(e) {
   const file = e.target.files[0]; if (!file) return;
   const r = new FileReader();
@@ -526,7 +785,9 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display
 STATUSES.forEach(s => {
   ['f-status', 'l-status', 'statusFilter'].forEach(id => $(id).insertAdjacentHTML('beforeend', `<option value="${s.id}">${s.label}</option>`));
 });
-['search', 'statusFilter', 'sortBy'].forEach(id => $(id).addEventListener('input', renderLeads));
+try { $('viewMode').value = localStorage.getItem('leadTracker.view') || 'table'; } catch {}
+$('viewMode').addEventListener('input', () => { try { localStorage.setItem('leadTracker.view', $('viewMode').value); } catch {} });
+['search', 'statusFilter', 'sortBy', 'viewMode'].forEach(id => $(id).addEventListener('input', renderLeads));
 $('hitFilter').addEventListener('input', renderHit);
 render();
 </script>

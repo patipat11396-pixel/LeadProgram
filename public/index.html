@@ -117,7 +117,10 @@
     <button class="tab" data-tab="hit">📞 Hit List<span id="hitBadge"></span></button>
     <button class="tab" data-tab="backup">⚙️ ตั้งค่า / สำรองข้อมูล</button>
   </nav>
-  <button class="primary" onclick="openLead()">+ เพิ่ม Lead</button>
+  <div style="display:flex;gap:6px">
+    <button id="langBtn" onclick="setLang(LANG === 'en' ? 'th' : 'en')" title="ภาษา / Language"></button>
+    <button class="primary" onclick="openLead()">+ เพิ่ม Lead</button>
+  </div>
 </header>
 
 <main>
@@ -307,6 +310,104 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ---------- Language (TH / EN) ----------
+// The app is written in Thai; in EN mode every Thai UI text on screen (and in pop-up messages) is translated
+// through this dictionary. Short words are only translated when they are a whole label, so customer data
+// typed in Thai is left alone.
+let LANG = (() => { try { return localStorage.getItem('leadTracker.lang') || 'th'; } catch { return 'th'; } })();
+const I18N = {"สินค้า": "Item", "✅ ต้องทำ": "✅ To-do", "⭐ ลูกค้าปัจจุบัน": "⭐ Current customers", "⚙️ ตั้งค่า / สำรองข้อมูล": "⚙️ Settings / Backup", "+ เพิ่ม Lead": "+ Add lead", "👥 Leads": "👥 Leads", "🔐 มีข้อมูลลูกค้าเตรียมไว้ให้แล้ว": "🔐 Customer data is ready to load", "ใส่รหัสผ่านเพื่อโหลดข้อมูลเข้าโปรแกรม (ทำครั้งเดียวต่อเครื่อง / เบราว์เซอร์) — รายการที่มีอยู่แล้วจะไม่ถูกเพิ่มซ้ำ": "Enter the password to load the data (once per device / browser) — existing records will not be added twice", "รหัสผ่าน": "Password", "โหลดข้อมูล": "Load data", "ปิด": "Close", "กำลังถอดรหัส…": "Decrypting…", "🔐 โหลดข้อมูลที่เตรียมไว้ (ใช้รหัสผ่าน)": "🔐 Load prepared data (password)", "กรุณาใส่รหัสผ่าน": "Please enter the password", "ต้องเปิดผ่านเว็บ (https) จึงจะถอดรหัสได้": "Open the app via the website (https) to decrypt", "ไม่พบไฟล์ข้อมูล": "Data file not found", "รหัสผ่านไม่ถูกต้อง": "Wrong password", "🔍 ค้นหา ชื่อ / บริษัท / เบอร์ / โน้ต": "🔍 Search name / company / phone / notes", "กำลังติดตาม (ไม่รวมที่ไม่สนใจ)": "In progress (excluding lost)", "Lead ทั้งหมด": "All leads", "ทุกระดับ": "All temperatures", "เรียงตาม: ความสำคัญ (ถึงกำหนด → Hot → เสนอราคา)": "Sort: priority (due → Hot → proposal)", "เรียงตาม: วันที่ต้องทำต่อ": "Sort: next-step date", "เรียงตาม: อัปเดตล่าสุด": "Sort: last updated", "เรียงตาม: ชื่อ": "Sort: name", "เรียงตาม: Hot ก่อน": "Sort: Hot first", "มุมมอง: ตาราง": "View: table", "มุมมอง: การ์ด": "View: cards", "📥 นำเข้า Excel": "📥 Import Excel", "📤 ส่งออก Excel": "📤 Export Excel", "ทั้งหมด": "All", "Hit List = รายชื่อที่ยังไม่มีเบอร์โทร": "Hit List = contacts without a phone number", "กด \"ค้น Google\" เพื่อหาเบอร์ → วางเบอร์ในช่อง → กด \"บันทึก\" รายชื่อจะย้ายไปอยู่ใน Leads พร้อมโทร": "Press \"Google it\" to find the number → paste it in the box → press \"Save\" and the contact moves to Leads, ready to call", "➕ เพิ่มรายชื่อทีละหลายคน (วางเป็นบรรทัด)": "➕ Add many contacts at once (one per line)", "1 บรรทัด = 1 คน รูปแบบ:": "1 line = 1 contact, format:", "ชื่อ, บริษัท, เว็บไซต์/ลิงก์ (ถ้ามี)": "Name, Company, Website/link (optional)", "คุณสมชาย, บริษัท ABC จำกัด, abc.co.th\nคุณสมหญิง, XYZ Trading": "John Smith, ABC Co., Ltd., abc.com\nJane Doe, XYZ Trading", "เพิ่มเข้า Hit List": "Add to Hit List", "ยังไม่ได้หา / กำลังหา": "Not searched / searching", "หาไม่เจอ (ลอง 3 ครั้งขึ้นไป)": "Not found (3+ tries)", "ทั้งหมดที่ไม่มีเบอร์": "All without phone", "🔍 ค้น Google": "🔍 Google it", "🌐 เว็บไซต์": "🌐 Website", "วางเบอร์ที่หาได้": "Paste the number you found", "หาไม่เจอ +1": "Not found +1", "รายละเอียด": "Details", "ไม่มีรายชื่อในกลุ่มนี้": "No contacts in this group", "บันทึก": "Save", "กรุณาวางเบอร์โทร": "Please paste a phone number", "โทรแนะนำตัวครั้งแรก": "First introduction call", "ลองหาที่ไหนแล้วบ้าง? (ไม่บังคับ)": "Where have you searched? (optional)", "🔍 ตรวจหารายการซ้ำในระบบ": "🔍 Find duplicates", "เทียบ อีเมล / เบอร์ / LINE / ชื่อที่คล้ายกัน (เช่น \"ABC Co., Ltd.\" กับ \"บริษัท ABC จำกัด\") แล้วเลือกรวมเป็นรายการเดียว — ประวัติการคุยของทั้งสองรายการจะถูกรวมไว้ ไม่หาย": "Compares email / phone / LINE / similar names (e.g. \"ABC Co., Ltd.\" and \"ABC Company Limited\") so you can merge them — the conversation history of both records is kept", "🔍 ตรวจหารายการซ้ำ": "🔍 Find duplicates", "คู่ที่อาจซ้ำ": "possible duplicate pairs", "รวม → เก็บชื่อซ้าย": "Merge → keep left name", "รวม → เก็บชื่อขวา": "Merge → keep right name", "ไม่ซ้ำ": "Not a duplicate", "ไม่พบรายการซ้ำ ✓": "No duplicates found ✓", "รวมแล้ว": "Merged", "อีเมลเดียวกัน": "Same email", "เบอร์เดียวกัน": "Same phone", "LINE เดียวกัน": "Same LINE", "ชื่อตรงกัน": "Same name", "ชื่อคล้ายกัน": "Similar name", "📧 เชื่อมต่อ Outlook (Microsoft 365)": "📧 Connect Outlook (Microsoft 365)", "ใช้ดึงอีเมลที่คุยกับลูกค้ามาแสดงในหน้าลูกค้า — ต้องลงทะเบียนแอปใน Microsoft Entra ครั้งแรก (ดูขั้นตอนในไฟล์ SETUP-OUTLOOK.md หรือส่งให้ฝ่าย IT)": "Shows your emails with each customer on their page — requires a one-time app registration in Microsoft Entra (see SETUP-OUTLOOK.md or send it to IT)", "Redirect URI (คัดลอกไปใส่ใน Entra → Single-page application)": "Redirect URI (copy into Entra → Single-page application)", "คัดลอกแล้ว": "Copied", "คัดลอก": "Copy", "💾 บันทึกการตั้งค่า": "💾 Save settings", "🔑 ล็อกอิน Microsoft": "🔑 Sign in with Microsoft", "ออกจากระบบ": "Sign out", "ยังไม่ได้ตั้งค่า Outlook — ไปที่แท็บ \"ตั้งค่า / สำรองข้อมูล\"": "Outlook is not set up — go to the \"Settings / Backup\" tab", "การเชื่อม Outlook ใช้ได้เฉพาะตอนเปิดผ่านเว็บ (https) ไม่ใช่เปิดจากไฟล์ในเครื่อง": "Outlook only works when the app is opened via the website (https), not from a local file", "โหลดตัวล็อกอิน Microsoft ไม่สำเร็จ": "Could not load the Microsoft sign-in library", "เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป — กรุณาอนุญาตป๊อปอัปสำหรับเว็บนี้แล้วลองใหม่": "The browser blocked the pop-up — please allow pop-ups for this site and try again", "บริษัทต้องให้ผู้ดูแลระบบ (IT) อนุมัติสิทธิ์ก่อน (Grant admin consent สำหรับ Mail.Read) — ดูข้อ 4 ใน SETUP-OUTLOOK.md": "Your IT admin must approve the permission first (Grant admin consent for Mail.Read) — see step 4 in SETUP-OUTLOOK.md", "Redirect URI ไม่ตรงกับที่ลงทะเบียนไว้ — คัดลอกช่อง Redirect URI ในหน้าตั้งค่าไปใส่ใน Entra ให้ตรงทุกตัวอักษร": "The Redirect URI does not match the registered one — copy it from Settings into Entra exactly", "ใน Entra ต้องเพิ่ม Redirect URI เป็นประเภท \"Single-page application\" (ไม่ใช่ Web)": "In Entra the Redirect URI must be of type \"Single-page application\" (not Web)", "Client ID หรือ Tenant ID ไม่ถูกต้อง — ตรวจสอบจากหน้า Overview ของแอปใน Entra": "Client ID or Tenant ID is wrong — check the app's Overview page in Entra", "เชื่อม Outlook ไม่สำเร็จ:": "Outlook connection failed:", "เชื่อมแล้ว": "Connected", "ยังไม่ได้ล็อกอิน": "Not signed in", "ยังไม่ได้ตั้งค่า": "Not set up", "Client ID ต้องเป็นรูปแบบ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx": "Client ID must look like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "Tenant ID ไม่ถูกต้อง": "Invalid Tenant ID", "บันทึกการตั้งค่าแล้ว": "Settings saved", "เชื่อม Outlook แล้ว": "Outlook connected", "ออกจากระบบ Outlook แล้ว": "Signed out of Outlook", "ยังไม่ได้ล็อกอิน Outlook": "Not signed in to Outlook", "ใส่อีเมลลูกค้าในช่อง \"อีเมล / LINE\" แล้วกดบันทึก เพื่อดึงอีเมลจาก Outlook": "Add the customer's email address and save to load emails from Outlook", "กำลังโหลดอีเมล…": "Loading emails…", "🔑 ล็อกอิน": "🔑 Sign in", "ยกเลิกแล้ว": "Cancelled", "📥 ลูกค้าส่งมา": "📥 From customer", "📤 เราส่งไป": "📤 Sent by us", "(ไม่มีหัวข้อ)": "(no subject)", "เปิด": "Open", "✓ อยู่ใน Log": "✓ In log", "+ บันทึกเป็น Log": "+ Save as log", "ไม่พบอีเมลกับ": "No emails with", "บันทึกอีเมลเป็น Log แล้ว": "Email saved as log", "📧 อีเมลกับลูกค้า (Outlook)": "📧 Emails with customer (Outlook)", "🔄 โหลดอีเมล": "🔄 Load emails", "ข้อมูลเก็บไว้ในเบราว์เซอร์เครื่องนี้": "Data is stored in this browser on this device", "ถ้าล้างประวัติเบราว์เซอร์ หรือเปลี่ยนเครื่อง ข้อมูลจะหาย — กรุณากด \"ดาวน์โหลดไฟล์สำรอง\" อย่างน้อยสัปดาห์ละครั้ง แล้วเก็บไฟล์ไว้ (เช่น Google Drive)": "Clearing browser data or switching devices loses the data — press \"Download backup\" at least once a week and keep the file (e.g. Google Drive)", "⬇️ ดาวน์โหลดไฟล์สำรอง (.json)": "⬇️ Download backup (.json)", "📤 ส่งออก Excel (.xlsx)": "📤 Export Excel (.xlsx)", "📥 นำเข้า Excel / CSV": "📥 Import Excel / CSV", "📄 ไฟล์ Excel ตัวอย่าง": "📄 Excel template", "⬆️ นำเข้าไฟล์สำรอง": "⬆️ Import backup", "ยังไม่เคยสำรอง": "never", "ยังไม่เคยสำรองข้อมูล": "No backup yet", "กดที่นี่เพื่อดาวน์โหลดไฟล์สำรอง": "click here to download a backup", "สำรองล่าสุด:": "last backup:", "รูปแบบไฟล์ไม่ถูกต้อง": "Invalid file format", "นำเข้าไม่สำเร็จ:": "Import failed:", "บันทึกไม่สำเร็จ:": "Save failed:", "กรุณาดาวน์โหลดไฟล์สำรองทันที": "Please download a backup now", "ชื่อผู้ติดต่อ *": "Contact name *", "บริษัท": "Company", "เบอร์โทร": "Phone", "อีเมล (หลายอันคั่นด้วย , )": "Email (separate several with , )", "เว็บไซต์ / ลิงก์": "Website / link", "มาจากไหน (แหล่งที่มา)": "Source", "เช่น งานแฟร์, แนะนำ, Facebook": "e.g. trade fair, referral, Facebook", "สถานะ": "Status", "ระดับความสนใจ": "Temperature", "สินค้า (Item)": "Item", "กล่อง Lead": "Lead inbox", "อัตโนมัติ": "Automatic", "มูลค่าโดยประมาณ (บาท)": "Estimated value (THB)", "🎯 สิ่งที่ต้องทำต่อ (What's next)": "🎯 What's next", "เช่น โทรตามใบเสนอราคา": "e.g. follow up on the quotation", "📅 ภายในวันที่": "📅 Due date", "โน้ตทั่วไป": "Notes", "🗒️ บันทึกการคุย (Log)": "🗒️ Conversation log", "ช่องทาง": "Channel", "📞 โทร": "📞 Call", "💬 LINE/แชท": "💬 LINE/chat", "✉️ อีเมล": "✉️ Email", "🤝 เจอตัว": "🤝 Meeting", "📝 อื่นๆ": "📝 Other", "📥 นำเข้าจาก Excel": "📥 Import from Excel", "วันที่คุย": "Date", "คุยอะไรกัน / ผลเป็นยังไง": "What was discussed / outcome", "เช่น ลูกค้าสนใจรุ่น A ขอใบเสนอราคา งบประมาณ 50,000": "e.g. interested in model A, asked for a quote, budget 50,000", "🎯 ขั้นต่อไป (จะอัปเดตช่อง What's next ด้านบนให้อัตโนมัติ)": "🎯 Next step (updates What's next above automatically)", "เช่น ส่งใบเสนอราคา": "e.g. send quotation", "เปลี่ยนสถานะเป็น": "Change status to", "(ไม่เปลี่ยน)": "(no change)", "+ บันทึก Log": "+ Save log", "ลบ Lead": "Delete lead", "💾 บันทึก": "💾 Save", "➕ เพิ่ม Lead ใหม่": "➕ New lead", "กรุณาใส่ชื่อผู้ติดต่อ": "Please enter a contact name", "บันทึกแล้ว": "Saved", "ลบแล้ว": "Deleted", "ลบ": "Delete", "เปลี่ยนสถานะ": "status changed", "ยังไม่มีบันทึก": "No logs yet", "กรุณาเขียนว่าคุยอะไรกัน": "Please describe the conversation", "บันทึก Log แล้ว": "Log saved", "ลบ Log นี้?": "Delete this log?", "ชื่อลูกค้า": "Customer name", "ใหม่": "New", "ติดต่อแล้ว": "Contacted", "สนใจ": "Interested", "เสนอราคา/ต่อรอง": "Proposal / Negotiation", "ลูกค้าปัจจุบัน": "Current customer", "ไม่สนใจ/ปิดไม่ได้": "Lost / Not interested", "วันนี้": "today", "พรุ่งนี้": "tomorrow", "(ยังไม่ระบุ)": "(not specified)", "⚠️ ยังไม่ได้ตั้งสิ่งที่ต้องทำต่อ": "⚠️ No next step set", "คุยล่าสุด": "Last contact", "ไม่มีเบอร์": "No phone", "🔴 เลยกำหนดแล้ว": "🔴 Overdue", "🟠 ต้องทำวันนี้": "🟠 Due today", "🔵 ภายใน 7 วัน": "🔵 Within 7 days", "⚪ ยังไม่ได้ตั้งวันทำต่อ": "⚪ No follow-up date", "ไม่มีงานค้าง 🎉": "Nothing pending 🎉", "กด \"+ เพิ่ม Lead\" เพื่อเริ่มต้น": "Press \"+ Add lead\" to start", "ยังไม่มีลูกค้าปัจจุบัน — Lead ที่เปลี่ยนสถานะเป็น \"ลูกค้าปัจจุบัน\" จะย้ายมาอยู่หน้านี้": "No current customers yet — leads whose status becomes \"Current customer\" move here", "ไม่พบ Lead": "No leads found", "ลูกค้า": "Customer", "ทำอะไรอยู่ (คุยล่าสุด)": "Current activity (last contact)", "ต้องทำอะไรต่อ": "Next step", "ภายในวันที่": "Due date", "เบอร์": "Phone", "⚠️ ยังไม่ได้ตั้ง": "⚠️ Not set", "ไม่มี": "None", "ชื่ออื่น:": "Also known as:", "ชื่อลูกค้า / บริษัท *": "Customer / company name *", "บริษัท (ถ้าแยกคอลัมน์)": "Company (if separate column)", "อีเมล": "Email", "เว็บไซต์": "Website", "แหล่งที่มา": "Source", "ประเภท (Lead / ลูกค้าปัจจุบัน / Lost)": "Type (Lead / Current customer / Lost)", "สถานะ / ความคืบหน้า": "Status / progress", "ระดับ Hot / Warm / Cold": "Hot / Warm / Cold", "มีโอกาสขาย? (Opp?)": "Opportunity? (Opp?)", "มูลค่า": "Value", "ทำอะไรอยู่ / คุยล่าสุด": "Current activity / last contact", "ช่องทางที่คุย (Method)": "Channel (Method)", "วันที่คุยล่าสุด": "Last contact date", "โน้ต / หมายเหตุ": "Notes", "Lead (ใช้สถานะตามคอลัมน์สถานะ)": "Lead (use the status column)", "ไม่สนใจ / Lost": "Lost / Not interested", "ยกเลิก": "Cancel", "นำเข้า": "Import", "— ไม่ใช้ —": "— not used —", "ไฟล์:": "File:", "จับคู่คอลัมน์": "Map columns", "(เดาให้แล้ว — กดเพื่อตรวจสอบ/แก้)": "(auto-detected — click to check / change)", "ประเภทใน Excel → แยกหน้า Lead / ลูกค้าปัจจุบัน": "Excel type → Lead / Current customer page", "สถานะใน Excel → สถานะในโปรแกรม": "Excel status → app status", "(อัตโนมัติ)": "(automatic)", "ผลลัพธ์:": "Result:", "แสดงเฉพาะที่อาจซ้ำ": "Show possible duplicates only", "⚠️ ยังไม่ได้เลือกคอลัมน์ \"ชื่อลูกค้า\" — ระบบจะใช้ชื่อบริษัทแทน": "⚠️ No \"customer name\" column selected — the company name will be used", "ซ้ำกับ?": "Duplicate of?", "เบอร์ / อีเมล": "Phone / email", "ข้อมูลเดิม": "Existing", "แถวด้านบน": "Row above", "🔗 รวมเป็นรายการเดียว": "🔗 Merge into one", "➕ ไม่ซ้ำ เพิ่มใหม่": "➕ Not a duplicate, add", "⏭ ข้ามแถวนี้": "⏭ Skip this row", "อ่านไฟล์ไม่สำเร็จ:": "Could not read the file:", "โหลดตัวอ่าน Excel ไม่สำเร็จ": "Could not load the Excel reader", "อาจซ้ำกับ": "Possible duplicate of", "ชื่อ": "Name", "ต้องทำต่อ": "Next step", "โน้ต": "Notes", "คุยอะไร": "Discussion", "ขั้นต่อไป": "Next step", "ประวัติการคุย": "Conversation log", "ทำอะไรอยู่": "Current activity", "ข้อมูลเดิม:": "Existing:", "แถวด้านบน:": "Row above:"};
+const I18N_RE = [[/ยังไม่เคยสำรองข้อมูล/g, "No backup yet"],
+  [/ยังไม่เคยสำรอง$/g, "never"],
+  [/\(กำหนด: /g, "(Due: "],
+  [/^คุยล่าสุด /g, "Last contact "],
+  [/^✅ เชื่อมแล้ว: /g, "✅ Connected: "],
+  [/^ไม่พบอีเมลกับ /g, "No emails with "],
+  [/· เปลี่ยนสถานะ → /g, "· status → "],
+  [/^ชื่ออื่น: /g, "Also known as: "],
+  [/สำรองล่าสุด: /g, "last backup: "],
+  [/^ชื่อตรงกัน/g, "Same name"],
+  [/^ชื่อคล้ายกัน/g, "Similar name"],
+  [/^อีเมลเดียวกัน/g, "Same email"],
+  [/^เบอร์เดียวกัน/g, "Same phone"],
+  [/^LINE เดียวกัน/g, "Same LINE"],
+  [/\(ชื่อตรงกัน/g, "(same name"],
+  [/\(ชื่อคล้ายกัน/g, "(similar name"],
+  [/\(อีเมลเดียวกัน/g, "(same email"],
+  [/\(เบอร์เดียวกัน/g, "(same phone"],
+  [/\(LINE เดียวกัน/g, "(same LINE"],
+  [/^อาจซ้ำกับ "/g, "Possible duplicate of \""],
+  [/^บันทึกไม่สำเร็จ: /g, "Save failed: "],
+  [/^เชื่อม Outlook ไม่สำเร็จ: /g, "Outlook connection failed: "],
+  [/^อ่านไฟล์ไม่สำเร็จ: /g, "Could not read the file: "],
+  [/^นำเข้าไม่สำเร็จ: /g, "Import failed: "],
+  [/เลยมา (\d+) วัน/g, "$1 days overdue"],
+  [/อีก (\d+) วัน/g, "in $1 days"],
+  [/ลองหาแล้ว (\d+) ครั้ง/g, "searched $1 times"],
+  [/มี Lead ทั้งหมด (\d+) รายการ/g, "$1 records in total"],
+  [/ไม่ได้สำรองข้อมูลมา (\d+) วันแล้ว/g, "No backup for $1 days"],
+  [/บันทึกเบอร์ (.+?) แล้ว → ไปอยู่ในรายการต้องทำ/g, "Saved phone for $1 → added to To-do"],
+  [/เพิ่ม (\d+) รายชื่อแล้ว/g, "Added $1 contacts"],
+  [/ข้าม (\d+) รายชื่อที่มีอยู่แล้ว:/g, "Skipped $1 contacts that already exist:"],
+  [/\(ซ้ำกับ /g, "(duplicate of "],
+  [/ลบ "(.*)" และ Log ทั้งหมด\? \(กู้คืนไม่ได้\)/g, "Delete \"$1\" and all its logs? (cannot be undone)"],
+  [/กด OK = เพิ่มใหม่อยู่ดี/g, "OK = add anyway"],
+  [/กด Cancel = ไม่เพิ่ม แล้วเปิดรายการเดิมแทน/g, "Cancel = do not add, open the existing record"],
+  [/รวม "(.*)" เข้าไปใน "(.*)"\?/g, "Merge \"$1\" into \"$2\"?"],
+  [/เบอร์\/อีเมล\/ประวัติการคุยทั้งหมดจะถูกรวมไว้ใน "(.*)"/g, "All phones / emails / logs will be kept in \"$1\""],
+  [/โหลดข้อมูลแล้ว (\d+) รายการ/g, "Loaded $1 records"],
+  [/\(มีอยู่แล้ว (\d+)\)/g, "($1 already existed)"],
+  [/พบ (\d+) คู่ที่อาจซ้ำ/g, "Found $1 possible duplicate pairs"],
+  [/พบ (\d+) แถว/g, "$1 rows found"],
+  [/ตรวจรายการซ้ำ — พบ (\d+) รายการที่อาจซ้ำ \(กับข้อมูลเดิม หรือซ้ำกันเองในไฟล์\)/g, "Duplicate check — $1 possible duplicates (with existing data or within the file)"],
+  [/เพิ่มใหม่ (\d+)/g, "New $1"],
+  [/รวมกับรายการเดิม (\d+)/g, "Merge into existing $1"],
+  [/· ข้าม (\d+)/g, "· Skip $1"],
+  [/\((\d+) แบบ — กดเพื่อตรวจสอบ\)/g, "($1 values — click to check)"],
+  [/\(คอลัมน์ (\d+)\)/g, "(column $1)"],
+  [/^ชีต: /g, "Sheet: "],
+  [/นำเข้า \(ใหม่ (\d+) · รวม (\d+)\)/g, "Import (new $1 · merge $2)"],
+  [/นำเข้าแล้ว: ใหม่ (\d+), รวมกับรายการเดิม (\d+)/g, "Imported: new $1, merged $2"],
+  [/, ข้าม (\d+)/g, ", skipped $1"],
+  [/ไฟล์มี (\d+) รายการ/g, "The file has $1 records"],
+  [/กด OK = รวมกับข้อมูลเดิม \(รายการ id ซ้ำจะใช้ของในไฟล์\)/g, "OK = merge with existing data (records with the same id use the file's version)"],
+  [/กด Cancel = ยกเลิก/g, "Cancel = cancel"],
+  [/นำเข้าแล้ว (\d+) รายการ/g, "Imported $1 records"],
+  [/Microsoft ตอบกลับ (\d+)/g, "Microsoft replied $1"],
+  [/🎯 ต่อไป: /g, "🎯 Next: "],
+  [/(\d+) log\b/g, "$1 logs"],
+  [/(?<![฀-๿])(\d+)\) /g, "$1) "]];
+const TH_RE = /[\u0E00-\u0E7F]/;
+const I18N_LONG = Object.keys(I18N).filter(k => k.replace(/[^\u0E00-\u0E7F]/g, '').length >= 6 && /[^\u0E00-\u0E7F]/.test(k))  // multi-word phrases only; single Thai words must be a whole label.sort((a, b) => b.length - a.length)
+  .map(k => [new RegExp('(^|[^\u0E00-\u0E7F])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\u0E00-\u0E7F])', 'g'), k]);
+function tr(str) {
+  if (LANG !== 'en' || typeof str !== 'string' || !TH_RE.test(str)) return str;
+  const t = str.trim();
+  if (I18N[t] !== undefined) return str.replace(t, I18N[t]);
+  const num = t.match(/^(\d+\)\s*)(.+)$/); if (num && I18N[num[2].trim()] !== undefined) return str.replace(num[2].trim(), I18N[num[2].trim()]);   // "1) heading"
+  let out = str;
+  for (const [re, rep] of I18N_RE) out = out.replace(re, rep);
+  for (const [re, k] of I18N_LONG) if (out.includes(k)) out = out.replace(re, (m, pre) => pre + I18N[k]);
+  return out;
+}
+function trTree(root) {
+  if (LANG !== 'en') return;
+  if (root.nodeType === 3) { const v = root.nodeValue, n = tr(v); if (n !== v) root.nodeValue = n; return; }
+  if (root.nodeType !== 1 || /^(SCRIPT|STYLE|TEXTAREA)$/.test(root.tagName)) return;
+  [root, ...root.querySelectorAll('[placeholder],[title]')].forEach(el => ['placeholder', 'title'].forEach(a => {
+    const v = el.getAttribute && el.getAttribute(a); if (v && TH_RE.test(v)) el.setAttribute(a, tr(v)); }));
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => /^(SCRIPT|STYLE|TEXTAREA)$/.test(n.parentNode.tagName) ? 2 : 1 });
+  const nodes = []; while (w.nextNode()) nodes.push(w.currentNode); nodes.forEach(trTree);
+}
+function setLang(l) { try { localStorage.setItem('leadTracker.lang', l); } catch {} location.reload(); }
+if (LANG === 'en') {
+  document.documentElement.lang = 'en';
+  new MutationObserver(ms => ms.forEach(m => m.type === 'characterData' ? trTree(m.target) : m.addedNodes.forEach(trTree)))
+    .observe(document.body, { subtree: true, childList: true, characterData: true });
+  const oa = window.alert.bind(window), oc = window.confirm.bind(window), op = window.prompt.bind(window);
+  window.alert = m => oa(tr(String(m))); window.confirm = m => oc(tr(String(m))); window.prompt = (m, d) => op(tr(String(m)), d);
+}
+const LOCALE = () => LANG === 'en' ? 'en-GB' : 'th-TH';
+
 // ---------- Data ----------
 const STORE_KEY = 'leadTracker.v1';
 const BACKUP_KEY = 'leadTracker.lastBackup';
@@ -357,7 +458,7 @@ const $ = id => document.getElementById(id);
 function fmtDate(d) {
   if (!d) return '';
   const [y, m, day] = d.split('-').map(Number);
-  return new Date(y, m - 1, day).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+  return new Date(y, m - 1, day).toLocaleDateString(LOCALE(), { day: 'numeric', month: 'short', year: '2-digit' });
 }
 function dateClass(d) {
   if (!d) return '';
@@ -492,7 +593,7 @@ function renderHit() {
 
 function renderBackupInfo() {
   const last = localStorage.getItem(BACKUP_KEY);
-  $('backupInfo').textContent = `มี Lead ทั้งหมด ${leads.length} รายการ · สำรองล่าสุด: ${last ? new Date(last).toLocaleString('th-TH') : 'ยังไม่เคยสำรอง'}`;
+  $('backupInfo').textContent = `มี Lead ทั้งหมด ${leads.length} รายการ · สำรองล่าสุด: ${last ? new Date(last).toLocaleString(LOCALE()) : 'ยังไม่เคยสำรอง'}`;
   const days = last ? (Date.now() - new Date(last)) / 86400000 : Infinity;
   const w = $('backupWarn');
   if (leads.length && days > 7) {
@@ -795,19 +896,20 @@ async function exportExcel() {
   try { await loadXLSX(); } catch (e) { alert(e.message); return; }
   const rows = leads.map(l => { const g = lastLog(l); return [l.name, l.company, l.phone, l.email, l.line, l.website, l.source,
     statusLabel(l.status), TEMPS[l.temp] ? l.temp.replace(/^./, c => c.toUpperCase()) : '', l.item, l.value, g?.text || '', g?.date || '', l.nextAction, l.nextDate, l.notes]; });
-  const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD, ...rows]);
+  rows.forEach(r => r[7] = tr(r[7]));                    // status in the chosen language (import understands both)
+  const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD.map(tr), ...rows]);
   ws['!cols'] = [18, 20, 14, 18, 12, 18, 12, 14, 10, 16, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
   const logRows = [];
   leads.forEach(l => (l.logs || []).forEach(g => logRows.push([l.name, l.company, g.date, g.type, g.text, g.next, g.nextDate])));
-  const ws2 = XLSX.utils.aoa_to_sheet([['ชื่อ', 'บริษัท', 'วันที่คุย', 'ช่องทาง', 'คุยอะไร', 'ขั้นต่อไป', 'ภายในวันที่'], ...logRows]);
+  const ws2 = XLSX.utils.aoa_to_sheet([['ชื่อ', 'บริษัท', 'วันที่คุย', 'ช่องทาง', 'คุยอะไร', 'ขั้นต่อไป', 'ภายในวันที่'].map(tr), ...logRows]);
   ws2['!cols'] = [18, 20, 12, 12, 50, 30, 13].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Leads'); XLSX.utils.book_append_sheet(wb, ws2, 'ประวัติการคุย');
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads'); XLSX.utils.book_append_sheet(wb, ws2, tr('ประวัติการคุย'));
   XLSX.writeFile(wb, `leads-${today()}.xlsx`);
 }
 async function downloadTemplate() {
   try { await loadXLSX(); } catch (e) { alert(e.message); return; }
-  const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD,
+  const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD.map(tr),
     ['คุณสมชาย', 'บริษัท ABC จำกัด', '0812345678', 'somchai@abc.co.th', 'somchai.abc', 'abc.co.th', 'งานแฟร์', 'สนใจ', 'Hot', 'Duck leg confit', 50000,
      'คุยแล้ว สนใจรุ่น A ขอใบเสนอราคา', '15/11/2026', 'ส่งใบเสนอราคา', '20/11/2026', '']]);
   ws['!cols'] = [18, 20, 14, 18, 12, 18, 12, 14, 10, 16, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
@@ -832,7 +934,7 @@ const IMPORT_FIELDS = [
   { key: 'value', label: 'มูลค่า', kw: ['มูลค่า', 'value', 'amount', 'งบประมาณ', 'ยอด'] },
   { key: 'current', label: 'ทำอะไรอยู่ / คุยล่าสุด', kw: ['ทำอะไรอยู่', 'คุยล่าสุด', 'ความคืบหน้า', 'อัปเดต', 'อัพเดท', 'update', 'progress', 'activity', 'รายละเอียดการคุย'] },
   { key: 'method', label: 'ช่องทางที่คุย (Method)', kw: ['method', 'ช่องทางที่คุย', 'ช่องทาง'] },
-  { key: 'lastDate', label: 'วันที่คุยล่าสุด', kw: ['วันที่คุยล่าสุด', 'วันที่คุย', 'ติดต่อล่าสุด', 'วันที่ติดต่อ', 'last contact', 'last reach', 'reach out'] },
+  { key: 'lastDate', label: 'วันที่คุยล่าสุด', kw: ['วันที่คุยล่าสุด', 'last contact date', 'วันที่คุย', 'ติดต่อล่าสุด', 'วันที่ติดต่อ', 'last contact', 'last reach', 'reach out'] },
   { key: 'nextAction', label: 'ต้องทำอะไรต่อ', kw: ['ต้องทำอะไรต่อ', 'ต้องทำต่อ', 'ทำต่อ', 'ขั้นต่อไป', 'สิ่งที่ต้องทำ', 'follow up note', 'next step', 'next action', 'to do', 'todo', 'next'] },
   { key: 'nextDate', label: 'ภายในวันที่', kw: ['ภายในวันที่', 'กำหนดส่ง', 'กำหนด', 'วันนัด', 'next follow up', 'due', 'deadline', 'follow up date', 'follow-up date'] },
   { key: 'notes', label: 'โน้ต / หมายเหตุ', kw: ['หมายเหตุ', 'โน้ต', 'note', 'remark', 'comment'] },
@@ -849,7 +951,7 @@ const KINDS = [{ id: 'lead', label: 'Lead (ใช้สถานะตามค�
 const norm = v => String(v ?? '').trim().toLowerCase();
 function guessStatus(raw) {               // '' = unknown → decided from other columns
   const v = norm(raw); if (!v || v === '-') return '';
-  const exact = STATUSES.find(s => norm(s.label) === v || s.id === v); if (exact) return exact.id;
+  const exact = STATUSES.find(s => norm(s.label) === v || norm(I18N[s.label]) === v || s.id === v); if (exact) return exact.id;
   for (const [id, kws] of STATUS_KW) if (kws.some(k => v.includes(k))) return id;
   return '';
 }
@@ -1205,6 +1307,8 @@ $('viewMode').addEventListener('input', () => { try { localStorage.setItem('lead
 $('hitFilter').addEventListener('input', renderHit);
 render();
 renderOutlookSettings();
+$('langBtn').textContent = LANG === 'en' ? '🌐 ไทย' : '🌐 EN';
+trTree(document.body);
 (() => { let done = false; try { done = !!localStorage.getItem(SEED_KEY); } catch {}
   if (!done && !leads.length && location.protocol.startsWith('http'))
     fetch('seed.enc.json', { method: 'HEAD', cache: 'no-store' }).then(r => { if (r.ok) $('seedCard').style.display = ''; }).catch(() => {});

@@ -111,7 +111,7 @@
     <button class="tab active" data-tab="todo">✅ ต้องทำ<span id="todoBadge"></span></button>
     <button class="tab" data-tab="leads">👥 Leads ทั้งหมด</button>
     <button class="tab" data-tab="hit">📞 Hit List<span id="hitBadge"></span></button>
-    <button class="tab" data-tab="backup">💾 สำรองข้อมูล</button>
+    <button class="tab" data-tab="backup">⚙️ ตั้งค่า / สำรองข้อมูล</button>
   </nav>
   <button class="primary" onclick="openLead()">+ เพิ่ม Lead</button>
 </header>
@@ -171,6 +171,22 @@
 
   <!-- TAB: BACKUP -->
   <section id="tab-backup" hidden>
+    <div class="card" id="outlookCard">
+      <b>📧 เชื่อมต่อ Outlook (Microsoft 365)</b>
+      <p class="muted" style="margin:4px 0 10px">ใช้ดึงอีเมลที่คุยกับลูกค้ามาแสดงในหน้าลูกค้า — ต้องลงทะเบียนแอปใน Microsoft Entra ครั้งแรก (ดูขั้นตอนในไฟล์ SETUP-OUTLOOK.md หรือส่งให้ฝ่าย IT)</p>
+      <div class="grid">
+        <div><label>Application (client) ID</label><input id="ms-client" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></div>
+        <div><label>Directory (tenant) ID</label><input id="ms-tenant" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></div>
+        <div style="grid-column:1/-1"><label>Redirect URI (คัดลอกไปใส่ใน Entra → Single-page application)</label>
+          <div style="display:flex;gap:6px"><input id="ms-redirect" readonly><button onclick="navigator.clipboard.writeText($('ms-redirect').value).then(()=>toast('คัดลอกแล้ว'))">คัดลอก</button></div></div>
+      </div>
+      <div class="toolbar" style="margin:10px 0 0">
+        <button onclick="msSaveCfg()">💾 บันทึกการตั้งค่า</button>
+        <button class="primary" id="ms-login" onclick="msLogin()">🔑 ล็อกอิน Microsoft</button>
+        <button id="ms-logout" onclick="msLogout()" style="display:none">ออกจากระบบ</button>
+        <span id="ms-status" class="muted"></span>
+      </div>
+    </div>
     <div class="card">
       <b>ข้อมูลเก็บไว้ในเบราว์เซอร์เครื่องนี้</b>
       <p class="muted">ถ้าล้างประวัติเบราว์เซอร์ หรือเปลี่ยนเครื่อง ข้อมูลจะหาย — กรุณากด "ดาวน์โหลดไฟล์สำรอง" อย่างน้อยสัปดาห์ละครั้ง แล้วเก็บไฟล์ไว้ (เช่น Google Drive)</p>
@@ -207,6 +223,14 @@
       <div><label>📅 ภายในวันที่</label><input id="f-nextDate" type="date"></div>
     </div>
     <div style="margin-top:10px"><label>โน้ตทั่วไป</label><textarea id="f-notes"></textarea></div>
+
+    <div id="mailSection" style="display:none">
+      <div class="section-title" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span>📧 อีเมลกับลูกค้า (Outlook)</span>
+        <button class="small" onclick="loadLeadMails(true)">🔄 โหลดอีเมล</button>
+      </div>
+      <div id="mailList"></div>
+    </div>
 
     <div id="logSection">
       <div class="section-title">🗒️ บันทึกการคุย (Log)</div>
@@ -438,6 +462,7 @@ function openLead(id) {
   $('logSection').style.display = id ? '' : 'none';
   $('l-date').value = today(); $('l-text').value = ''; $('l-next').value = ''; $('l-nextDate').value = ''; $('l-status').value = '';
   renderLogs(l);
+  showLeadMails(l);
   $('leadModal').classList.add('open');
   setTimeout(() => $(id ? 'l-text' : 'f-name').focus(), 50);
 }
@@ -540,6 +565,148 @@ function exportJSON() {
   download(`leads-backup-${today()}.json`, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), leads }, null, 2), 'application/json');
   localStorage.setItem(BACKUP_KEY, new Date().toISOString()); renderBackupInfo();
 }
+// ---------- Outlook (Microsoft Graph, read-only) ----------
+// Sign-in and mail reads go straight from this browser to Microsoft; nothing passes through any other server.
+const MS_KEY = 'leadTracker.outlook';
+const MS_SCOPES = ['User.Read', 'Mail.Read'];
+let msCfg = (() => { try { return JSON.parse(localStorage.getItem(MS_KEY)) || {}; } catch { return {}; } })();
+let msApp = null, msAccount = null, msLoading = null;
+const mailCache = {};                     // leadId -> { addrs, mails } for this session
+const msRedirect = () => new URL('auth-redirect', location.href).href;
+
+function msInit() {
+  if (msApp) return Promise.resolve(msApp);
+  if (!msCfg.clientId) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า Outlook — ไปที่แท็บ "ตั้งค่า / สำรองข้อมูล"'));
+  if (location.protocol === 'file:') return Promise.reject(new Error('การเชื่อม Outlook ใช้ได้เฉพาะตอนเปิดผ่านเว็บ (https) ไม่ใช่เปิดจากไฟล์ในเครื่อง'));
+  return msLoading ||= (async () => {
+    if (!window.msal) await new Promise((res, rej) => {
+      const sc = document.createElement('script'); sc.src = 'vendor/msal-browser.min.js';
+      sc.onload = res; sc.onerror = () => rej(new Error('โหลดตัวล็อกอิน Microsoft ไม่สำเร็จ')); document.head.appendChild(sc);
+    });
+    const app = new msal.PublicClientApplication({
+      auth: { clientId: msCfg.clientId, authority: 'https://login.microsoftonline.com/' + (msCfg.tenant || 'organizations'),
+              redirectUri: msRedirect() },
+      cache: { cacheLocation: 'localStorage' },
+    });
+    await app.initialize();
+    msAccount = app.getAllAccounts()[0] || null;
+    msApp = app; return app;
+  })().catch(e => { msLoading = null; throw e; });
+}
+function msErr(e) {
+  const s = String((e && (e.errorCode || '') + ' ' + (e.message || '')) || e);
+  if (/user_cancelled/.test(s)) return '';
+  if (/popup_window_error|empty_window_error/.test(s)) return 'เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป — กรุณาอนุญาตป๊อปอัปสำหรับเว็บนี้แล้วลองใหม่';
+  if (/AADSTS65001|AADSTS90094|consent_required|admin/i.test(s)) return 'บริษัทต้องให้ผู้ดูแลระบบ (IT) อนุมัติสิทธิ์ก่อน (Grant admin consent สำหรับ Mail.Read) — ดูข้อ 4 ใน SETUP-OUTLOOK.md';
+  if (/AADSTS50011/.test(s)) return 'Redirect URI ไม่ตรงกับที่ลงทะเบียนไว้ — คัดลอกช่อง Redirect URI ในหน้าตั้งค่าไปใส่ใน Entra ให้ตรงทุกตัวอักษร';
+  if (/AADSTS9002326|AADSTS700054|AADSTS9002327/.test(s)) return 'ใน Entra ต้องเพิ่ม Redirect URI เป็นประเภท "Single-page application" (ไม่ใช่ Web)';
+  if (/AADSTS50194|AADSTS700016|AADSTS90002/.test(s)) return 'Client ID หรือ Tenant ID ไม่ถูกต้อง — ตรวจสอบจากหน้า Overview ของแอปใน Entra';
+  return 'เชื่อม Outlook ไม่สำเร็จ: ' + s;
+}
+function renderOutlookSettings() {
+  $('ms-client').value = msCfg.clientId || ''; $('ms-tenant').value = msCfg.tenant || ''; $('ms-redirect').value = msRedirect();
+  $('ms-status').textContent = msAccount ? `✅ เชื่อมแล้ว: ${msAccount.username}` : (msCfg.clientId ? 'ยังไม่ได้ล็อกอิน' : 'ยังไม่ได้ตั้งค่า');
+  $('ms-login').style.display = msAccount ? 'none' : ''; $('ms-logout').style.display = msAccount ? '' : 'none';
+}
+function msSaveCfg() {
+  const clientId = $('ms-client').value.trim(), tenant = $('ms-tenant').value.trim();
+  const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (clientId && !guid.test(clientId)) { alert('Client ID ต้องเป็นรูปแบบ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'); return false; }
+  if (tenant && !guid.test(tenant) && !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(tenant)) { alert('Tenant ID ไม่ถูกต้อง'); return false; }
+  if (clientId !== msCfg.clientId || tenant !== msCfg.tenant) { msApp = null; msLoading = null; msAccount = null; }
+  msCfg = { clientId, tenant };
+  try { localStorage.setItem(MS_KEY, JSON.stringify(msCfg)); } catch {}
+  renderOutlookSettings(); toast('บันทึกการตั้งค่าแล้ว'); return true;
+}
+async function msLogin() {
+  if (($('ms-client').value.trim() !== (msCfg.clientId || '') || $('ms-tenant').value.trim() !== (msCfg.tenant || '')) && !msSaveCfg()) return;
+  try {
+    await msInit();
+    const r = await msApp.loginPopup({ scopes: MS_SCOPES, prompt: 'select_account', redirectUri: msRedirect() });
+    msAccount = r.account; renderOutlookSettings(); toast('เชื่อม Outlook แล้ว');
+    if (currentId) showLeadMails(leads.find(x => x.id === currentId));
+  } catch (e) { const m = msErr(e); if (m) alert(m); }
+}
+async function msLogout() {
+  try { await msInit(); await msApp.clearCache({ account: msAccount }); } catch {}
+  msAccount = null; Object.keys(mailCache).forEach(k => delete mailCache[k]); renderOutlookSettings(); toast('ออกจากระบบ Outlook แล้ว');
+}
+async function msToken(interactive) {
+  await msInit();
+  if (!msAccount) throw Object.assign(new Error('ยังไม่ได้ล็อกอิน Outlook'), { needLogin: true });
+  try { return (await msApp.acquireTokenSilent({ scopes: MS_SCOPES, account: msAccount })).accessToken; }
+  catch (e) {
+    if (interactive && e instanceof msal.InteractionRequiredAuthError)
+      return (await msApp.acquireTokenPopup({ scopes: MS_SCOPES, account: msAccount, redirectUri: msRedirect() })).accessToken;
+    throw Object.assign(e, { needLogin: true });
+  }
+}
+const emailsOf = l => [...new Set((String(l.email || '').match(/[^\s,;:<>()"']+@[^\s,;:<>()"']+\.[a-z]{2,}/gi) || []).map(a => a.toLowerCase()))];
+async function fetchMails(addrs, interactive) {
+  const token = await msToken(interactive);
+  const sel = 'id,subject,from,toRecipients,receivedDateTime,bodyPreview,webLink';
+  const lists = await Promise.all(addrs.map(async a => {
+    const url = `https://graph.microsoft.com/v1.0/me/messages?$search=${encodeURIComponent(`"participants:${a}"`)}&$top=25&$select=${sel}`;
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) { const t = await r.text(); throw new Error(`Microsoft ตอบกลับ ${r.status}: ${t.slice(0, 200)}`); }
+    return (await r.json()).value || [];
+  }));
+  const byId = new Map(); lists.flat().forEach(m => byId.set(m.id, m));
+  return [...byId.values()].sort((a, b) => (b.receivedDateTime || '').localeCompare(a.receivedDateTime || ''));
+}
+function showLeadMails(l) {
+  const addrs = l && l.id ? emailsOf(l) : [];
+  $('mailSection').style.display = l && l.id && msCfg.clientId ? '' : 'none';
+  if (!l || !l.id || !msCfg.clientId) return;
+  if (!addrs.length) { $('mailList').innerHTML = '<div class="muted">ใส่อีเมลลูกค้าในช่อง "อีเมล / LINE" แล้วกดบันทึก เพื่อดึงอีเมลจาก Outlook</div>'; return; }
+  const c = mailCache[l.id];
+  if (c && c.addrs.join() === addrs.join()) { renderMailList(); return; }
+  loadLeadMails(false);
+}
+async function loadLeadMails(interactive) {
+  const id = currentId, l = leads.find(x => x.id === id); if (!l) return;
+  const addrs = emailsOf(l);
+  if (!addrs.length) { showLeadMails(l); return; }
+  $('mailList').innerHTML = '<div class="muted">กำลังโหลดอีเมล…</div>';
+  try {
+    const mails = await fetchMails(addrs, interactive);
+    mailCache[id] = { addrs, mails };
+    if (currentId === id) renderMailList();
+  } catch (e) {
+    if (currentId !== id) return;
+    $('mailList').innerHTML = e.needLogin
+      ? `<div class="muted">ยังไม่ได้ล็อกอิน Outlook <button class="small primary" onclick="msLogin()">🔑 ล็อกอิน</button></div>`
+      : `<div class="date-overdue">${esc(msErr(e) || 'ยกเลิกแล้ว')}</div>`;
+  }
+}
+function renderMailList() {
+  const l = leads.find(x => x.id === currentId), c = mailCache[currentId]; if (!l || !c) return;
+  const logged = new Set((l.logs || []).map(g => g.emailId).filter(Boolean));
+  $('mailList').innerHTML = c.mails.length ? `<div class="table-wrap" style="max-height:320px;overflow:auto"><table class="lt"><tbody>${c.mails.slice(0, 30).map(m => {
+    const incoming = c.addrs.includes((m.from?.emailAddress?.address || '').toLowerCase());
+    return `<tr style="cursor:default">
+      <td style="white-space:nowrap">${incoming ? '📥 ลูกค้าส่งมา' : '📤 เราส่งไป'}<div class="muted" style="font-size:12px">${fmtDate(isoLocal(m.receivedDateTime))}</div></td>
+      <td class="wrap"><b>${esc(m.subject || '(ไม่มีหัวข้อ)')}</b><div class="muted" style="font-size:13px">${esc((m.bodyPreview || '').slice(0, 200))}</div></td>
+      <td style="white-space:nowrap">
+        ${m.webLink && /^https:\/\/[^/]*(outlook|office|microsoft)/.test(m.webLink) ? `<a class="btn small" target="_blank" rel="noopener" href="${esc(m.webLink)}">เปิด</a>` : ''}
+        ${logged.has(m.id) ? '<span class="muted small">✓ อยู่ใน Log</span>' : `<button class="small" onclick="logMail('${esc(m.id)}')">+ บันทึกเป็น Log</button>`}
+      </td></tr>`;
+  }).join('')}</tbody></table></div>` : `<div class="muted">ไม่พบอีเมลกับ ${esc(c.addrs.join(', '))}</div>`;
+}
+function isoLocal(dt) { if (!dt) return ''; const d = new Date(dt); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function logMail(mailId) {
+  const c = mailCache[currentId], m = c && c.mails.find(x => x.id === mailId); if (!m) return;
+  if (!saveLead(true)) return;          // keep any edits made to the form above
+  const l = leads.find(x => x.id === currentId);
+  const incoming = c.addrs.includes((m.from?.emailAddress?.address || '').toLowerCase());
+  l.logs = [{ id: uid(), emailId: m.id, date: isoLocal(m.receivedDateTime) || today(), type: '✉️ อีเมล',
+              text: `${incoming ? '📥 ลูกค้าส่งมา' : '📤 เราส่งไป'}: ${m.subject || '(ไม่มีหัวข้อ)'}\n${(m.bodyPreview || '').slice(0, 500)}`,
+              next: '', nextDate: '', statusChange: '' }, ...(l.logs || [])].sort((a, b) => b.date.localeCompare(a.date));
+  if (l.status === 'new') l.status = 'contacted';
+  l.updatedAt = new Date().toISOString();
+  persist(); renderLogs(l); renderMailList(); toast('บันทึกอีเมลเป็น Log แล้ว');
+}
+
 // ---------- Excel (import / export) ----------
 let xlsxLoading = null;
 function loadXLSX() {
@@ -790,6 +957,8 @@ $('viewMode').addEventListener('input', () => { try { localStorage.setItem('lead
 ['search', 'statusFilter', 'sortBy', 'viewMode'].forEach(id => $(id).addEventListener('input', renderLeads));
 $('hitFilter').addEventListener('input', renderHit);
 render();
+renderOutlookSettings();
+if (msCfg.clientId && location.protocol !== 'file:') msInit().then(renderOutlookSettings).catch(() => {});
 </script>
 </body>
 </html>

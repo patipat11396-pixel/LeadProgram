@@ -63,6 +63,9 @@
   .pill.s-proposal { background: #cffafe; color: #0e7490; }
   .pill.s-won { background: var(--ok-weak); color: var(--ok); }
   .pill.s-lost { background: var(--line); color: var(--muted); }
+  .pill.t-hot { background: var(--danger-weak); color: var(--danger); margin-left: 4px; }
+  .pill.t-warm { background: var(--warn-weak); color: var(--warn); margin-left: 4px; }
+  .pill.t-cold { background: var(--primary-weak); color: var(--primary); margin-left: 4px; }
   .date-overdue { color: var(--danger); font-weight: 600; }
   .date-today { color: var(--warn); font-weight: 600; }
   .empty { text-align: center; color: var(--muted); padding: 24px; }
@@ -109,7 +112,8 @@
   <h1>📇 Lead Tracker</h1>
   <nav class="tabs">
     <button class="tab active" data-tab="todo">✅ ต้องทำ<span id="todoBadge"></span></button>
-    <button class="tab" data-tab="leads">👥 Leads ทั้งหมด</button>
+    <button class="tab" data-tab="leads">👥 Leads<span id="leadBadge"></span></button>
+    <button class="tab" data-tab="customers">⭐ ลูกค้าปัจจุบัน<span id="custBadge"></span></button>
     <button class="tab" data-tab="hit">📞 Hit List<span id="hitBadge"></span></button>
     <button class="tab" data-tab="backup">⚙️ ตั้งค่า / สำรองข้อมูล</button>
   </nav>
@@ -129,11 +133,13 @@
   <section id="tab-leads" hidden>
     <div class="toolbar">
       <input id="search" placeholder="🔍 ค้นหา ชื่อ / บริษัท / เบอร์ / โน้ต">
-      <select id="statusFilter"><option value="">ทุกสถานะ</option></select>
+      <select id="statusFilter"><option value="">กำลังติดตาม (ไม่รวมที่ไม่สนใจ)</option><option value="all">Lead ทั้งหมด</option></select>
+      <select id="tempFilter"><option value="">ทุกระดับ</option><option value="hot">🔥 Hot</option><option value="warm">🌤 Warm</option><option value="cold">❄️ Cold</option></select>
       <select id="sortBy">
         <option value="next">เรียงตาม: วันที่ต้องทำต่อ</option>
         <option value="updated">เรียงตาม: อัปเดตล่าสุด</option>
         <option value="name">เรียงตาม: ชื่อ</option>
+        <option value="temp">เรียงตาม: Hot ก่อน</option>
       </select>
       <select id="viewMode">
         <option value="table">มุมมอง: ตาราง</option>
@@ -171,6 +177,12 @@
 
   <!-- TAB: BACKUP -->
   <section id="tab-backup" hidden>
+    <div class="card">
+      <b>🔍 ตรวจหารายการซ้ำในระบบ</b>
+      <p class="muted" style="margin:4px 0 10px">เทียบ อีเมล / เบอร์ / LINE / ชื่อที่คล้ายกัน (เช่น "ABC Co., Ltd." กับ "บริษัท ABC จำกัด") แล้วเลือกรวมเป็นรายการเดียว — ประวัติการคุยของทั้งสองรายการจะถูกรวมไว้ ไม่หาย</p>
+      <button onclick="scanDuplicates()">🔍 ตรวจหารายการซ้ำ</button>
+      <div id="dupResult" style="margin-top:10px"></div>
+    </div>
     <div class="card" id="outlookCard">
       <b>📧 เชื่อมต่อ Outlook (Microsoft 365)</b>
       <p class="muted" style="margin:4px 0 10px">ใช้ดึงอีเมลที่คุยกับลูกค้ามาแสดงในหน้าลูกค้า — ต้องลงทะเบียนแอปใน Microsoft Entra ครั้งแรก (ดูขั้นตอนในไฟล์ SETUP-OUTLOOK.md หรือส่งให้ฝ่าย IT)</p>
@@ -212,10 +224,13 @@
       <div><label>ชื่อผู้ติดต่อ *</label><input id="f-name"></div>
       <div><label>บริษัท</label><input id="f-company"></div>
       <div><label>เบอร์โทร</label><input id="f-phone" inputmode="tel"></div>
-      <div><label>อีเมล / LINE</label><input id="f-email"></div>
+      <div><label>อีเมล (หลายอันคั่นด้วย , )</label><input id="f-email"></div>
+      <div><label>LINE</label><input id="f-line"></div>
       <div><label>เว็บไซต์ / ลิงก์</label><input id="f-website"></div>
       <div><label>มาจากไหน (แหล่งที่มา)</label><input id="f-source" placeholder="เช่น งานแฟร์, แนะนำ, Facebook"></div>
       <div><label>สถานะ</label><select id="f-status"></select></div>
+      <div><label>ระดับความสนใจ</label><select id="f-temp"><option value="">—</option><option value="hot">🔥 Hot</option><option value="warm">🌤 Warm</option><option value="cold">❄️ Cold</option></select></div>
+      <div><label>สินค้า (Item)</label><input id="f-item"></div>
       <div><label>มูลค่าโดยประมาณ (บาท)</label><input id="f-value" inputmode="numeric"></div>
     </div>
     <div class="grid" style="margin-top:10px">
@@ -287,10 +302,13 @@ const STATUSES = [
   { id: 'contacted',  label: 'ติดต่อแล้ว' },
   { id: 'interested', label: 'สนใจ' },
   { id: 'proposal',   label: 'เสนอราคา/ต่อรอง' },
-  { id: 'won',        label: 'ปิดการขายได้' },
+  { id: 'won',        label: 'ลูกค้าปัจจุบัน' },
   { id: 'lost',       label: 'ไม่สนใจ/ปิดไม่ได้' },
 ];
-const ACTIVE = s => s !== 'won' && s !== 'lost';
+const ACTIVE = s => s !== 'won' && s !== 'lost';      // still in the sales pipeline
+const FOLLOW = l => l.status !== 'lost';               // follow-ups count (leads and current customers)
+const TEMPS = { hot: '🔥 Hot', warm: '🌤 Warm', cold: '❄️ Cold' };
+const tempTag = t => TEMPS[t] ? ` <span class="pill t-${t}">${TEMPS[t]}</span>` : '';
 const statusLabel = id => (STATUSES.find(s => s.id === id) || STATUSES[0]).label;
 
 let leads = load();
@@ -335,12 +353,12 @@ function render() {
 }
 
 function leadItem(l, opts = {}) {
-  const dc = ACTIVE(l.status) ? dateClass(l.nextDate) : '';
+  const dc = FOLLOW(l) ? dateClass(l.nextDate) : '';
   const last = lastLog(l);
   return `<div class="item ${dc}" onclick="openLead('${l.id}')">
     <div class="main">
       <div><span class="name">${esc(l.name)}</span> ${l.company ? `<span class="muted">· ${esc(l.company)}</span>` : ''}
-        <span class="pill s-${l.status}">${statusLabel(l.status)}</span></div>
+        <span class="pill s-${l.status}">${statusLabel(l.status)}</span>${tempTag(l.temp)}</div>
       ${l.nextAction || l.nextDate ? `<div>🎯 ${esc(l.nextAction || '(ยังไม่ระบุ)')}
         ${l.nextDate ? `<span class="${dc ? 'date-' + dc : 'muted'}"> — ${fmtDate(l.nextDate)} (${daysText(l.nextDate)})</span>` : ''}</div>`
         : (ACTIVE(l.status) ? `<div class="date-today">⚠️ ยังไม่ได้ตั้งสิ่งที่ต้องทำต่อ</div>` : '')}
@@ -353,21 +371,24 @@ function leadItem(l, opts = {}) {
 }
 
 function renderTodo() {
-  const active = leads.filter(l => ACTIVE(l.status));
+  const active = leads.filter(FOLLOW);
   const t = today();
   const overdue = active.filter(l => l.nextDate && l.nextDate < t).sort((a, b) => a.nextDate.localeCompare(b.nextDate));
   const todayL = active.filter(l => l.nextDate === t);
   const week = new Date(t); week.setUTCDate(week.getUTCDate() + 7);
   const weekStr = week.toISOString().slice(0, 10);
   const upcoming = active.filter(l => l.nextDate && l.nextDate > t && l.nextDate <= weekStr).sort((a, b) => a.nextDate.localeCompare(b.nextDate));
-  const noNext = active.filter(l => !l.nextDate);
+  const noNext = active.filter(l => !l.nextDate && ACTIVE(l.status));
 
   const counts = STATUSES.map(s => ({ ...s, n: leads.filter(l => l.status === s.id).length }));
   $('stats').innerHTML = counts.map(s =>
-    `<div class="stat" onclick="goStatus('${s.id}')"><b>${s.n}</b><span class="pill s-${s.id}">${s.label}</span></div>`).join('');
+    `<div class="stat" onclick="goStatus('${s.id}')">${s.id === 'won' ? '⭐ ' : ''}<b>${s.n}</b><span class="pill s-${s.id}">${s.label}</span></div>`).join('');
 
   const urgent = overdue.length + todayL.length;
   $('todoBadge').innerHTML = urgent ? `<span class="badge">${urgent}</span>` : '';
+  const nb = n => n ? `<span class="badge" style="background:var(--muted)">${n}</span>` : '';
+  $('leadBadge').innerHTML = nb(leads.filter(l => ACTIVE(l.status)).length);
+  $('custBadge').innerHTML = nb(leads.filter(l => l.status === 'won').length);
 
   const block = (title, arr) => arr.length ? `<div class="section-title">${title} (${arr.length})</div>${arr.map(l => leadItem(l)).join('')}` : '';
   const html = block('🔴 เลยกำหนดแล้ว', overdue) + block('🟠 ต้องทำวันนี้', todayL) +
@@ -379,24 +400,28 @@ function renderLeads() {
   const q = $('search').value.trim().toLowerCase();
   const sf = $('statusFilter').value;
   const sort = $('sortBy').value;
-  let arr = leads.filter(l => !sf || l.status === sf).filter(l => !q ||
-    [l.name, l.company, l.phone, l.email, l.notes, l.nextAction, l.source, ...(l.logs || []).map(x => x.text)]
+  const cust = listMode === 'customers';
+  let arr = leads.filter(l => cust ? l.status === 'won'
+      : l.status !== 'won' && (sf === 'all' || (sf ? l.status === sf : l.status !== 'lost')))
+    .filter(l => !$('tempFilter').value || l.temp === $('tempFilter').value).filter(l => !q ||
+    [l.name, l.company, l.aka, l.phone, l.email, l.line, l.item, l.notes, l.nextAction, l.source, ...(l.logs || []).map(x => x.text)]
       .join(' ').toLowerCase().includes(q));
   arr.sort((a, b) => {
     if (sort === 'name') return a.name.localeCompare(b.name, 'th');
     if (sort === 'updated') return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+    if (sort === 'temp') { const o = { hot: 0, warm: 1, cold: 2 }; return (o[a.temp] ?? 3) - (o[b.temp] ?? 3) || (a.nextDate || '9999').localeCompare(b.nextDate || '9999'); }
     return (a.nextDate || '9999').localeCompare(b.nextDate || '9999');
   });
-  if (!arr.length) { $('leadList').innerHTML = `<div class="empty">ไม่พบ Lead</div>`; return; }
+  if (!arr.length) { $('leadList').innerHTML = `<div class="empty">${cust ? 'ยังไม่มีลูกค้าปัจจุบัน — Lead ที่เปลี่ยนสถานะเป็น "ลูกค้าปัจจุบัน" จะย้ายมาอยู่หน้านี้' : 'ไม่พบ Lead'}</div>`; return; }
   if ($('viewMode').value === 'cards') { $('leadList').innerHTML = arr.map(l => leadItem(l)).join(''); return; }
   $('leadList').innerHTML = `<div class="table-wrap"><table class="lt">
-    <thead><tr><th>ลูกค้า</th><th>สถานะ</th><th>ทำอะไรอยู่ (คุยล่าสุด)</th><th>ต้องทำอะไรต่อ</th><th>ภายในวันที่</th><th>เบอร์</th></tr></thead>
+    <thead><tr><th>ลูกค้า</th><th>${cust ? 'สินค้า (Item)' : 'สถานะ'}</th><th>ทำอะไรอยู่ (คุยล่าสุด)</th><th>ต้องทำอะไรต่อ</th><th>ภายในวันที่</th><th>เบอร์</th></tr></thead>
     <tbody>${arr.map(l => {
-      const dc = ACTIVE(l.status) ? dateClass(l.nextDate) : '';
+      const dc = FOLLOW(l) ? dateClass(l.nextDate) : '';
       const last = lastLog(l);
       return `<tr class="${dc}" onclick="openLead('${l.id}')">
-        <td><b>${esc(l.name)}</b>${l.company ? `<div class="muted">${esc(l.company)}</div>` : ''}</td>
-        <td><span class="pill s-${l.status}">${statusLabel(l.status)}</span></td>
+        <td><b>${esc(l.name)}</b>${l.company ? `<div class="muted">${esc(l.company)}</div>` : ''}${l.aka ? `<div class="muted" style="font-size:12px">ชื่ออื่น: ${esc(l.aka)}</div>` : ''}</td>
+        <td>${cust ? (esc(l.item) || '<span class="muted">—</span>') : `<span class="pill s-${l.status}">${statusLabel(l.status)}</span>${tempTag(l.temp)}${l.item ? `<div class="muted" style="font-size:12px">${esc(l.item)}</div>` : ''}`}</td>
         <td class="wrap">${last ? `<span class="muted">${fmtDate(last.date)}</span> ${esc(last.text).slice(0, 160)}` : '<span class="muted">—</span>'}</td>
         <td class="wrap">${l.nextAction ? esc(l.nextAction) : (ACTIVE(l.status) ? '<span class="date-today">⚠️ ยังไม่ได้ตั้ง</span>' : '<span class="muted">—</span>')}</td>
         <td style="white-space:nowrap">${l.nextDate ? `<span class="${dc ? 'date-' + dc : ''}">${fmtDate(l.nextDate)}</span><div class="muted" style="font-size:12px">${daysText(l.nextDate)}</div>` : '<span class="muted">—</span>'}</td>
@@ -443,15 +468,20 @@ function renderBackupInfo() {
 }
 
 // ---------- Tabs ----------
+let listMode = 'leads';
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  if (name === 'customers' || name === 'leads') {           // both pages share one list, filtered differently
+    listMode = name; ['statusFilter', 'tempFilter'].forEach(id => $(id).style.display = name === 'customers' ? 'none' : '');
+    renderLeads(); name = 'leads';
+  }
   ['todo', 'leads', 'hit', 'backup'].forEach(t => $('tab-' + t).hidden = t !== name);
 }
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
-function goStatus(id) { $('statusFilter').value = id; showTab('leads'); renderLeads(); }
+function goStatus(id) { if (id === 'won') return showTab('customers'); $('statusFilter').value = id; showTab('leads'); }
 
 // ---------- Lead modal ----------
-const FIELDS = ['name', 'company', 'phone', 'email', 'website', 'source', 'status', 'value', 'next', 'nextDate', 'notes'];
+const FIELDS = ['name', 'company', 'phone', 'email', 'line', 'website', 'source', 'status', 'temp', 'item', 'value', 'next', 'nextDate', 'notes'];
 function openLead(id) {
   currentId = id || null;
   const l = leads.find(x => x.id === id) || { status: 'new' };
@@ -483,6 +513,8 @@ function saveLead(silent) {
     const l = leads.find(x => x.id === currentId); readForm(l); l.updatedAt = now;
   } else {
     const l = { id: uid(), logs: [], createdAt: now, updatedAt: now, hitAttempts: 0 }; readForm(l);
+    const d = findDuplicate(l, leads.map(x => ({ lead: x, info: dupInfo(x), existing: true })));
+    if (d && !confirm(`อาจซ้ำกับ "${d.target.lead.name}" (${d.reason})\n\nกด OK = เพิ่มใหม่อยู่ดี\nกด Cancel = ไม่เพิ่ม แล้วเปิดรายการเดิมแทน`)) { openLead(d.target.lead.id); return false; }
     leads.push(l); currentId = l.id;
   }
   persist();
@@ -546,13 +578,18 @@ function bulkAdd() {
   const lines = $('bulkInput').value.split('\n').map(s => s.trim()).filter(Boolean);
   if (!lines.length) return;
   const now = new Date().toISOString();
+  const pool = leads.map(x => ({ lead: x, info: dupInfo(x), existing: true })); const skipped = [];
   lines.forEach(line => {
     const [name, company = '', website = ''] = line.split(/[,\t]/).map(s => s.trim());
+    const d = findDuplicate({ name: name || company, company }, pool);
+    if (d && d.score >= 0.95) { skipped.push(`${name || company} (ซ้ำกับ ${d.target.lead.name})`); return; }
+    pool.push({ lead: { name: name || company, company }, info: dupInfo({ name: name || company, company }) });
     leads.push({ id: uid(), name: name || company, company, website, phone: '', email: '', source: 'Hit List',
                  status: 'new', value: '', nextAction: '', nextDate: '', notes: '', logs: [],
                  hitAttempts: 0, createdAt: now, updatedAt: now });
   });
-  $('bulkInput').value = ''; persist(); toast(`เพิ่ม ${lines.length} รายชื่อแล้ว`);
+  $('bulkInput').value = ''; persist(); toast(`เพิ่ม ${lines.length - skipped.length} รายชื่อแล้ว`);
+  if (skipped.length) alert(`ข้าม ${skipped.length} รายชื่อที่มีอยู่แล้ว:\n\n` + skipped.join('\n'));
 }
 
 // ---------- Backup ----------
@@ -718,14 +755,14 @@ function loadXLSX() {
   });
 }
 const pad = n => String(n).padStart(2, '0');
-const EXPORT_HEAD = ['ชื่อ', 'บริษัท', 'เบอร์โทร', 'อีเมล/LINE', 'เว็บไซต์', 'แหล่งที่มา', 'สถานะ', 'มูลค่า',
+const EXPORT_HEAD = ['ชื่อ', 'บริษัท', 'เบอร์โทร', 'อีเมล', 'LINE', 'เว็บไซต์', 'แหล่งที่มา', 'สถานะ', 'ระดับความสนใจ', 'สินค้า', 'มูลค่า',
                      'ทำอะไรอยู่ (คุยล่าสุด)', 'วันที่คุยล่าสุด', 'ต้องทำต่อ', 'ภายในวันที่', 'โน้ต'];
 async function exportExcel() {
   try { await loadXLSX(); } catch (e) { alert(e.message); return; }
-  const rows = leads.map(l => { const g = lastLog(l); return [l.name, l.company, l.phone, l.email, l.website, l.source,
-    statusLabel(l.status), l.value, g?.text || '', g?.date || '', l.nextAction, l.nextDate, l.notes]; });
+  const rows = leads.map(l => { const g = lastLog(l); return [l.name, l.company, l.phone, l.email, l.line, l.website, l.source,
+    statusLabel(l.status), TEMPS[l.temp] ? l.temp.replace(/^./, c => c.toUpperCase()) : '', l.item, l.value, g?.text || '', g?.date || '', l.nextAction, l.nextDate, l.notes]; });
   const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD, ...rows]);
-  ws['!cols'] = [18, 20, 14, 18, 18, 12, 14, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
+  ws['!cols'] = [18, 20, 14, 18, 12, 18, 12, 14, 10, 16, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
   const logRows = [];
   leads.forEach(l => (l.logs || []).forEach(g => logRows.push([l.name, l.company, g.date, g.type, g.text, g.next, g.nextDate])));
   const ws2 = XLSX.utils.aoa_to_sheet([['ชื่อ', 'บริษัท', 'วันที่คุย', 'ช่องทาง', 'คุยอะไร', 'ขั้นต่อไป', 'ภายในวันที่'], ...logRows]);
@@ -737,43 +774,65 @@ async function exportExcel() {
 async function downloadTemplate() {
   try { await loadXLSX(); } catch (e) { alert(e.message); return; }
   const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEAD,
-    ['คุณสมชาย', 'บริษัท ABC จำกัด', '0812345678', 'somchai@abc.co.th', 'abc.co.th', 'งานแฟร์', 'สนใจ', 50000,
+    ['คุณสมชาย', 'บริษัท ABC จำกัด', '0812345678', 'somchai@abc.co.th', 'somchai.abc', 'abc.co.th', 'งานแฟร์', 'สนใจ', 'Hot', 'Duck leg confit', 50000,
      'คุยแล้ว สนใจรุ่น A ขอใบเสนอราคา', '15/11/2026', 'ส่งใบเสนอราคา', '20/11/2026', '']]);
-  ws['!cols'] = [18, 20, 14, 18, 18, 12, 14, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
+  ws['!cols'] = [18, 20, 14, 18, 12, 18, 12, 14, 10, 16, 10, 40, 13, 30, 13, 30].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Leads');
   XLSX.writeFile(wb, 'lead-template.xlsx');
 }
 
 // Which Excel column goes to which field — guessed from header text, user can change
 const IMPORT_FIELDS = [
-  { key: 'name', label: 'ชื่อลูกค้า / ผู้ติดต่อ *', kw: ['ชื่อลูกค้า', 'ชื่อผู้ติดต่อ', 'ผู้ติดต่อ', 'ชื่อ', 'name', 'contact', 'customer', 'ลูกค้า'] },
-  { key: 'company', label: 'บริษัท', kw: ['บริษัท', 'company', 'องค์กร', 'ร้าน', 'organization', 'organisation'] },
+  { key: 'name', label: 'ชื่อลูกค้า / บริษัท *', kw: ['ชื่อลูกค้า', 'ชื่อผู้ติดต่อ', 'ผู้ติดต่อ', 'ชื่อ', 'name', 'contact', 'customer', 'ลูกค้า'] },
+  { key: 'company', label: 'บริษัท (ถ้าแยกคอลัมน์)', kw: ['บริษัท', 'company', 'องค์กร', 'ร้าน', 'organization', 'organisation'] },
   { key: 'phone', label: 'เบอร์โทร', kw: ['เบอร์โทร', 'เบอร์', 'โทรศัพท์', 'มือถือ', 'phone', 'tel', 'mobile'] },
-  { key: 'email', label: 'อีเมล / LINE', kw: ['อีเมล', 'email', 'e-mail', 'line', 'ไลน์'] },
+  { key: 'email', label: 'อีเมล', kw: ['อีเมล', 'email', 'e-mail'] },
+  { key: 'line', label: 'LINE', kw: ['line', 'ไลน์', 'line id'] },
   { key: 'website', label: 'เว็บไซต์', kw: ['เว็บไซต์', 'เว็บ', 'website', 'web', 'url', 'ลิงก์', 'link'] },
   { key: 'source', label: 'แหล่งที่มา', kw: ['แหล่งที่มา', 'ที่มา', 'source', 'channel'] },
-  { key: 'status', label: 'สถานะ', kw: ['สถานะ', 'status', 'stage'] },
+  { key: 'kind', label: 'ประเภท (Lead / ลูกค้าปัจจุบัน / Lost)', kw: ['type', 'ประเภท', 'กลุ่มลูกค้า', 'category'] },
+  { key: 'status', label: 'สถานะ / ความคืบหน้า', kw: ['opp. status', 'สถานะ', 'status', 'stage'] },
+  { key: 'temp', label: 'ระดับ Hot / Warm / Cold', kw: ['state', 'ระดับความสนใจ', 'ระดับ', 'temperature', 'hot/warm'] },
+  { key: 'opp', label: 'มีโอกาสขาย? (Opp?)', kw: ['opp?', 'opportunity', 'โอกาส'] },
+  { key: 'item', label: 'สินค้า (Item)', kw: ['สินค้า', 'item', 'product'] },
   { key: 'value', label: 'มูลค่า', kw: ['มูลค่า', 'value', 'amount', 'งบประมาณ', 'ยอด'] },
-  { key: 'current', label: 'ทำอะไรอยู่ / คุยล่าสุด', kw: ['ทำอะไรอยู่', 'คุยล่าสุด', 'ความคืบหน้า', 'อัปเดต', 'อัพเดท', 'update', 'progress', 'last activity', 'รายละเอียดการคุย'] },
-  { key: 'lastDate', label: 'วันที่คุยล่าสุด', kw: ['วันที่คุยล่าสุด', 'วันที่คุย', 'ติดต่อล่าสุด', 'วันที่ติดต่อ', 'last contact'] },
-  { key: 'nextAction', label: 'ต้องทำอะไรต่อ', kw: ['ต้องทำอะไรต่อ', 'ต้องทำต่อ', 'ทำต่อ', 'ขั้นต่อไป', 'สิ่งที่ต้องทำ', 'next step', 'next action', 'to do', 'todo', 'next'] },
-  { key: 'nextDate', label: 'ภายในวันที่', kw: ['ภายในวันที่', 'กำหนดส่ง', 'กำหนด', 'วันนัด', 'due', 'deadline', 'follow up date', 'follow-up date'] },
+  { key: 'current', label: 'ทำอะไรอยู่ / คุยล่าสุด', kw: ['ทำอะไรอยู่', 'คุยล่าสุด', 'ความคืบหน้า', 'อัปเดต', 'อัพเดท', 'update', 'progress', 'activity', 'รายละเอียดการคุย'] },
+  { key: 'method', label: 'ช่องทางที่คุย (Method)', kw: ['method', 'ช่องทางที่คุย', 'ช่องทาง'] },
+  { key: 'lastDate', label: 'วันที่คุยล่าสุด', kw: ['วันที่คุยล่าสุด', 'วันที่คุย', 'ติดต่อล่าสุด', 'วันที่ติดต่อ', 'last contact', 'last reach', 'reach out'] },
+  { key: 'nextAction', label: 'ต้องทำอะไรต่อ', kw: ['ต้องทำอะไรต่อ', 'ต้องทำต่อ', 'ทำต่อ', 'ขั้นต่อไป', 'สิ่งที่ต้องทำ', 'follow up note', 'next step', 'next action', 'to do', 'todo', 'next'] },
+  { key: 'nextDate', label: 'ภายในวันที่', kw: ['ภายในวันที่', 'กำหนดส่ง', 'กำหนด', 'วันนัด', 'next follow up', 'due', 'deadline', 'follow up date', 'follow-up date'] },
   { key: 'notes', label: 'โน้ต / หมายเหตุ', kw: ['หมายเหตุ', 'โน้ต', 'note', 'remark', 'comment'] },
 ];
-const STATUS_KW = [ // checked in this order ("ไม่สนใจ" must win over "สนใจ")
-  ['lost', ['ไม่สนใจ', 'ปิดไม่ได้', 'ยกเลิก', 'ไม่ซื้อ', 'lost', 'reject', 'cancel', 'dead']],
-  ['won', ['ปิดการขายได้', 'ปิดได้', 'ปิดการขาย', 'ซื้อแล้ว', 'สำเร็จ', 'won', 'closed', 'deal']],
-  ['proposal', ['เสนอราคา', 'ใบเสนอ', 'ต่อรอง', 'proposal', 'quote', 'quotation', 'negotiat']],
-  ['interested', ['สนใจ', 'interested', 'qualified', 'hot', 'warm']],
-  ['contacted', ['ติดต่อแล้ว', 'ติดต่อ', 'โทรแล้ว', 'คุยแล้ว', 'contacted', 'follow']],
+const STATUS_KW = [ // checked in this order ("ไม่สนใจ" must win over "สนใจ", "almost closed" over "closed")
+  ['lost', ['ไม่สนใจ', 'ปิดไม่ได้', 'ยกเลิก', 'ไม่ซื้อ', 'lost', 'reject', 'cancel', 'dead', 'no interest', 'not interest', 'not matching']],
+  ['proposal', ['เสนอราคา', 'ใบเสนอ', 'ต่อรอง', 'proposal', 'propos', 'quote', 'quotation', 'negotiat', 'sample', 'ตัวอย่าง', 'almost']],
+  ['won', ['ลูกค้าปัจจุบัน', 'ปิดการขายได้', 'ปิดได้', 'ปิดการขาย', 'ซื้อแล้ว', 'สำเร็จ', 'won', 'closed', 'deal']],
+  ['interested', ['สนใจ', 'interested', 'qualified', 'hot', 'warm', 'meeting', 'นัด']],
+  ['contacted', ['ติดต่อแล้ว', 'ติดต่อ', 'โทรแล้ว', 'คุยแล้ว', 'contacted', 'follow', 'no reply', 'ไม่ตอบ']],
   ['new', ['ใหม่', 'new', 'lead', 'cold']],
 ];
+const KINDS = [{ id: 'lead', label: 'Lead (ใช้สถานะตามคอลัมน์สถานะ)' }, { id: 'customer', label: '⭐ ลูกค้าปัจจุบัน' }, { id: 'lost', label: 'ไม่สนใจ / Lost' }];
 const norm = v => String(v ?? '').trim().toLowerCase();
-function guessStatus(raw) {
-  const v = norm(raw); if (!v) return '';
+function guessStatus(raw) {               // '' = unknown → decided from other columns
+  const v = norm(raw); if (!v || v === '-') return '';
   const exact = STATUSES.find(s => norm(s.label) === v || s.id === v); if (exact) return exact.id;
   for (const [id, kws] of STATUS_KW) if (kws.some(k => v.includes(k))) return id;
-  return 'new';
+  return '';
+}
+function guessKind(raw) {
+  const v = norm(raw);
+  if (/^curr|customer|ลูกค้าปัจจุบัน|ลูกค้าเก่า|ลูกค้าประจำ|active/.test(v)) return 'customer';
+  if (/lost|dead|ไม่สนใจ|ปิดไม่ได้/.test(v)) return 'lost';
+  return 'lead';
+}
+function guessTemp(raw) { const v = norm(raw); return /hot|ร้อน/.test(v) ? 'hot' : /warm|อุ่น/.test(v) ? 'warm' : /cold|เย็น/.test(v) ? 'cold' : ''; }
+function methodType(raw) {
+  const v = norm(raw); if (!v) return '📥 นำเข้าจาก Excel';
+  if (/meet|เจอ|นัด/.test(v)) return '🤝 เจอตัว';
+  if (/call|โทร/.test(v) && !/mail/.test(v)) return '📞 โทร';
+  if (/mail|อีเมล/.test(v)) return '✉️ อีเมล';
+  if (/line|ไลน์|whats|facebook|messenger|linkedin|instagram|chat|แชท/.test(v)) return '💬 ' + String(raw).trim();
+  return '📝 ' + String(raw).trim();
 }
 function guessMapping(headers) {
   const pairs = [];
@@ -814,6 +873,120 @@ function cleanPhone(v) {
   return String(v ?? '').trim();
 }
 
+// ---------- Duplicate detection (names need not match 100%) ----------
+const LEGAL_RE = /\b(co\.?\s*,?\s*ltd\.?|company\s+limited|co\.?\s*,?\s*limited|limited|ltd\.?|public\s+company|pcl\.?|inc\.?|corp\.?|corporation|llc|group|the|branch)\b|บริษัท|จำกัด|มหาชน|ห้างหุ้นส่วน|หจก\.?|บจก\.?|สาขา/gi;
+function normName(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, ' and ')
+    .replace(LEGAL_RE, ' ').replace(/[^a-z0-9ก-๙]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function nameAliases(l) {                 // "Avant Co., Ltd. (Hard Rock Café)" → main ["avant"], extra ["hard rock cafe"]
+  const main = new Set(), extra = new Set(), ok = a => a.replace(/\s/g, '').length >= 3;
+  [l.name, l.company, ...String(l.aka || '').split(' | ')].forEach(s => {
+    s = String(s || ''); if (!s.trim()) return;
+    main.add(normName(s.replace(/\([^)]*\)/g, ' ')));
+    (s.match(/\(([^)]*)\)/g) || []).forEach(p => extra.add(normName(p)));   // text in brackets: exact match only
+  });
+  return { main: [...main].filter(ok), extra: [...extra].filter(ok) };
+}
+function phoneKeys(l) {
+  const out = new Set();
+  [l.phone, l.line].forEach(s => (String(s || '').match(/\+?\d[\d\s().-]{6,}\d/g) || []).forEach(m => {
+    let d = m.replace(/\D/g, '');
+    if (d.startsWith('66') && d.length >= 11) d = '0' + d.slice(2);
+    d = d[0] === '0' && /[689]/.test(d[1]) ? d.slice(0, 10) : d.slice(0, 9);
+    if (d.length >= 9) out.add(d);
+  }));
+  return out;
+}
+const lineKey = l => { const v = norm(l.line).replace(/^@/, ''); return v && !/^\+?[\d\s-]+$/.test(v) ? v : ''; };
+function bigrams(s) { s = s.replace(/\s/g, ''); const m = new Map(); for (let i = 0; i < s.length - 1; i++) { const g = s.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); } return m; }
+function dice(a, b) {
+  const A = bigrams(a), B = bigrams(b); let inter = 0, na = 0, nb = 0;
+  A.forEach(v => na += v); B.forEach(v => nb += v); A.forEach((v, g) => inter += Math.min(v, B.get(g) || 0));
+  return na + nb ? 2 * inter / (na + nb) : 0;
+}
+function dupInfo(l) { return { aliases: nameAliases(l), phones: phoneKeys(l), emails: new Set(emailsOf(l)), line: lineKey(l) }; }
+function matchScore(a, b) {               // a, b = dupInfo(); returns {score, reason}
+  for (const e of a.emails) if (b.emails.has(e)) return { score: 1, reason: 'อีเมลเดียวกัน' };
+  for (const p of a.phones) if (b.phones.has(p)) return { score: 1, reason: 'เบอร์เดียวกัน' };
+  if (a.line && a.line === b.line) return { score: 1, reason: 'LINE เดียวกัน' };
+  let best = { score: 0, reason: '' };
+  const allA = [...a.aliases.main, ...a.aliases.extra], allB = [...b.aliases.main, ...b.aliases.extra];
+  for (const x of allA) for (const y of allB) if (x === y && x.replace(/\s/g, '').length >= 4) best = { score: 0.97, reason: 'ชื่อตรงกัน' };
+  if (best.score) return { score: best.score, reason: `${best.reason} ${Math.round(best.score * 100)}%` };
+  for (const x of a.aliases.main) for (const y of b.aliases.main) {
+    const [sh, lo] = x.length <= y.length ? [x, y] : [y, x];
+    let s = dice(x, y);                    // typo-level similarity, e.g. "dusit thaini" vs "dusit thani"
+    if (sh.includes(' ') && sh.replace(/\s/g, '').length >= 6 && (` ${lo} `).includes(` ${sh} `)) s = Math.max(s, 0.85);  // "hard rock" inside "hard rock cafe"
+    if (s > best.score) best = { score: s, reason: 'ชื่อคล้ายกัน' };
+  }
+  return best.score >= 0.8 ? { score: best.score, reason: `${best.reason} ${Math.round(best.score * 100)}%` } : best;
+}
+function findDuplicate(rec, pool, skipId) {  // pool: [{lead, info}]
+  const info = dupInfo(rec); let best = null;
+  pool.forEach(p => { if (p.lead.id && p.lead.id === skipId) return; const m = matchScore(info, p.info);
+    if (m.score >= 0.8 && (!best || m.score > best.score)) best = { ...m, target: p }; });
+  return best;
+}
+function mergeInto(ex, r) {               // fill/extend an existing lead with data from r (never deletes)
+  const same = (k, cur, v) => {
+    if (k === 'phone' || k === 'line') { const a = phoneKeys({ phone: cur }), b = phoneKeys({ phone: v }); if (b.size && [...b].every(x => a.has(x))) return true; }
+    if (k === 'email') { const a = new Set(emailsOf({ email: cur })), b = emailsOf({ email: v }); if (b.length && b.every(x => a.has(x))) return true; }
+    return norm(cur).includes(norm(v));
+  };
+  const addList = (k, sep = ', ') => { const v = String(r[k] || '').trim(); if (!v) return;
+    const cur = String(ex[k] || ''); if (!cur.trim()) ex[k] = v; else if (!same(k, cur, v)) ex[k] = cur + sep + v; };
+  ['phone', 'email', 'line', 'item'].forEach(k => addList(k));
+  const known = nameAliases(ex).main;       // keep the other spelling so it stays searchable / matchable
+  [r.name, r.company].forEach(n => { n = String(n || '').trim(); const a = normName(n.replace(/\([^)]*\)/g, ' '));
+    if (n && a && !known.includes(a)) { ex.aka = ex.aka ? ex.aka + ' | ' + n : n; known.push(a); } });
+  addList('notes', '\n');
+  ['company', 'website', 'source', 'value', 'temp'].forEach(k => { if (r[k]) ex[k] = r[k]; else if (!ex[k]) ex[k] = ''; });
+  if (r.status) ex.status = r.status;
+  if (r.nextAction || r.nextDate) { ex.nextAction = r.nextAction || ''; ex.nextDate = r.nextDate || ''; }
+  const texts = new Set((ex.logs || []).map(g => g.text));
+  (r.logs || []).forEach(g => { if (!texts.has(g.text)) ex.logs = [...(ex.logs || []), g]; });
+  ex.logs = (ex.logs || []).sort((a, b) => b.date.localeCompare(a.date));
+  ex.hitAttempts = Math.max(ex.hitAttempts || 0, r.hitAttempts || 0);
+  ex.updatedAt = new Date().toISOString();
+}
+
+const NOTDUP_KEY = 'leadTracker.notDup';
+function notDupSet() { try { return new Set(JSON.parse(localStorage.getItem(NOTDUP_KEY)) || []); } catch { return new Set(); } }
+function scanDuplicates() {
+  const ignore = notDupSet(), pool = leads.map(l => ({ lead: l, info: dupInfo(l) })), pairs = [];
+  for (let i = 0; i < pool.length; i++) for (let j = i + 1; j < pool.length; j++) {
+    const a = pool[i].lead, b = pool[j].lead;
+    if (ignore.has([a.id, b.id].sort().join('|'))) continue;
+    const m = matchScore(pool[i].info, pool[j].info);
+    if (m.score >= 0.8) pairs.push({ a, b, ...m });
+  }
+  pairs.sort((x, y) => y.score - x.score);
+  const who = l => `<b>${esc(l.name)}</b> <span class="pill s-${l.status}">${statusLabel(l.status)}</span>
+    <div class="muted" style="font-size:12px">${esc([l.phone, l.email].filter(Boolean).join(' · ') || '—')} · ${(l.logs || []).length} log</div>`;
+  $('dupResult').innerHTML = pairs.length ? `<div class="muted" style="margin-bottom:6px">พบ ${pairs.length} คู่ที่อาจซ้ำ</div>
+    <div class="table-wrap"><table class="lt"><tbody>${pairs.map(p => `<tr style="cursor:default">
+      <td>${who(p.a)}</td><td>${who(p.b)}</td><td class="muted" style="white-space:nowrap">${esc(p.reason)}</td>
+      <td style="white-space:nowrap"><button class="small primary" onclick="mergeLeads('${p.a.id}','${p.b.id}')">รวม → เก็บชื่อซ้าย</button>
+        <button class="small" onclick="mergeLeads('${p.b.id}','${p.a.id}')">รวม → เก็บชื่อขวา</button>
+        <button class="small" onclick="markNotDup('${p.a.id}','${p.b.id}')">ไม่ซ้ำ</button></td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="muted">ไม่พบรายการซ้ำ ✓</div>';
+}
+function mergeLeads(keepId, dropId) {
+  const a = leads.find(x => x.id === keepId), b = leads.find(x => x.id === dropId); if (!a || !b) return;
+  if (!confirm(`รวม "${b.name}" เข้าไปใน "${a.name}"?\n\nเบอร์/อีเมล/ประวัติการคุยทั้งหมดจะถูกรวมไว้ใน "${a.name}"`)) return;
+  const r = { ...b, status: '' };
+  ['company', 'website', 'source', 'value', 'temp'].forEach(k => r[k] = a[k] ? '' : b[k]);
+  if (a.nextAction || a.nextDate) { r.nextAction = ''; r.nextDate = ''; }
+  mergeInto(a, r);
+  leads = leads.filter(x => x.id !== dropId); persist(); scanDuplicates(); toast('รวมแล้ว');
+}
+function markNotDup(a, b) {
+  const s = notDupSet(); s.add([a, b].sort().join('|'));
+  try { localStorage.setItem(NOTDUP_KEY, JSON.stringify([...s])); } catch {}
+  scanDuplicates();
+}
+
 let imp = null;
 function pickExcel() { $('excelFile').value = ''; $('excelFile').click(); }
 async function readExcel(e) {
@@ -821,7 +994,8 @@ async function readExcel(e) {
   try {
     await loadXLSX();
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: true });   // raw: CSV ไม่แปลงวันที่แบบอเมริกัน
-    imp = { wb, fileName: file.name, mode: 'update' };
+    imp = { wb, fileName: file.name, onlyDup: false };
+    e.target.value = '';
     loadSheet(wb.SheetNames[0]);
     $('importModal').classList.add('open');
   } catch (err) { alert('อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
@@ -833,98 +1007,112 @@ function loadSheet(name) {
   imp.headers = hIdx >= 0 ? aoa[hIdx].map(h => String(h).trim()) : [];
   imp.rows = hIdx >= 0 ? aoa.slice(hIdx + 1).filter(r => r.some(c => String(c).trim())) : [];
   imp.map = guessMapping(imp.headers);
-  imp.statusMap = {};
+  imp.statusMap = {}; imp.kindMap = {}; imp.actions = {};
   renderImport();
 }
 function cell(r, key) { const i = imp.map[key]; return i === undefined || i === '' ? '' : r[i]; }
 function buildRecords() {
-  return imp.rows.map(r => {
+  const recs = imp.rows.map((r, i) => {
     const txt = k => String(cell(r, k) ?? '').trim();
-    const rec = { name: txt('name'), company: txt('company'), phone: cleanPhone(cell(r, 'phone')), email: txt('email'),
-      website: txt('website'), source: txt('source'), value: txt('value'), current: txt('current'),
-      nextAction: txt('nextAction'), notes: txt('notes'),
+    const rec = { _i: i, name: txt('name'), company: txt('company'), phone: cleanPhone(cell(r, 'phone')), email: txt('email'),
+      line: cleanPhone(cell(r, 'line')), website: txt('website'), source: txt('source'), value: txt('value'), item: txt('item'),
+      temp: guessTemp(txt('temp')), nextAction: txt('nextAction'), notes: txt('notes'),
       lastDate: toISODate(cell(r, 'lastDate')), nextDate: toISODate(cell(r, 'nextDate')) };
     const rawNext = txt('nextDate');
     if (rawNext && !rec.nextDate) rec.nextAction = (rec.nextAction + ` (กำหนด: ${rawNext})`).trim();  // วันที่อ่านไม่ออก: เก็บข้อความไว้ไม่ให้หาย
-    const rawStatus = txt('status');
-    rec.status = rawStatus ? (imp.statusMap[rawStatus] || guessStatus(rawStatus)) : (rec.current ? 'contacted' : 'new');
+    const rawStatus = txt('status'), rawKind = txt('kind'), opp = txt('opp');
+    const statusNote = rawStatus && rawStatus !== '-' && !STATUSES.some(s => s.label === rawStatus) ? rawStatus : '';
+    rec.current = [txt('current'), statusNote].filter(Boolean).join(' — ');
+    let st = rawStatus ? (imp.statusMap[rawStatus] ?? guessStatus(rawStatus)) : '';
+    if (!st) st = rec.current || rec.lastDate ? 'contacted' : 'new';
+    if ((st === 'new' || st === 'contacted') && (rec.temp === 'hot' || rec.temp === 'warm' || /^y/i.test(opp))) st = 'interested';
+    const kind = rawKind ? (imp.kindMap[rawKind] || guessKind(rawKind)) : 'lead';
+    if (kind === 'customer') st = 'won'; else if (kind === 'lost') st = 'lost';
+    rec.status = st;
+    rec.logs = rec.current ? [{ id: uid(), date: rec.lastDate || today(), type: methodType(txt('method')), text: rec.current,
+                                next: rec.nextAction, nextDate: rec.nextDate, statusChange: '' }] : [];
     if (!rec.name) rec.name = rec.company;
     return rec;
   }).filter(r => r.name);
+  // match each row against the current data + the rows above it in the same file
+  const pool = leads.map(l => ({ lead: l, info: dupInfo(l), existing: true }));
+  recs.forEach(r => {
+    r.dup = findDuplicate(r, pool);
+    const def = r.dup ? (r.dup.score >= 0.95 ? 'merge' : 'new') : 'new';   // only near-certain matches merge by default
+    r.action = imp.actions[r._i] || def;
+    pool.push({ lead: r, info: dupInfo(r), existing: false });
+  });
+  return recs;
 }
-const dupKey = l => { const d = String(l.phone || '').replace(/\D/g, ''); return d.length >= 8 ? 'p' + d.slice(-9) : 'n' + norm(l.name) + '|' + norm(l.company); };
 function renderImport() {
   const recs = buildRecords();
-  const existing = new Set(leads.map(dupKey));
-  const rawStatuses = imp.map.status === undefined ? [] : [...new Set(imp.rows.map(r => String(r[imp.map.status] ?? '').trim()).filter(Boolean))];
+  const col = k => imp.map[k] === undefined ? [] : [...new Set(imp.rows.map(r => String(r[imp.map[k]] ?? '').trim()).filter(v => v && v !== '-'))];
+  const rawStatuses = col('status'), rawKinds = col('kind');
   const opt = (v, sel, label) => `<option value="${esc(v)}" ${String(sel) === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
   const colOpts = sel => opt('', sel ?? '', '— ไม่ใช้ —') + imp.headers.map((h, i) => opt(i, sel ?? '', h || `(คอลัมน์ ${i + 1})`)).join('');
-  const nNew = recs.filter(r => !existing.has(dupKey(r))).length;
+  const dups = recs.filter(r => r.dup);
+  const n = { new: recs.filter(r => r.action === 'new').length, merge: recs.filter(r => r.action === 'merge').length, skip: recs.filter(r => r.action === 'skip').length };
+  const nCust = recs.filter(r => r.action !== 'skip' && r.status === 'won').length;
+  let step = 1;
   $('imp-body').innerHTML = `
     <div class="toolbar">
       <span>ไฟล์: <b>${esc(imp.fileName)}</b></span>
-      ${imp.wb.SheetNames.length > 1 ? `<select onchange="loadSheet(this.value)" style="flex:0 1 220px">${imp.wb.SheetNames.map(n => opt(n, imp.sheet, 'ชีต: ' + n)).join('')}</select>` : ''}
+      ${imp.wb.SheetNames.length > 1 ? `<select onchange="loadSheet(this.value)" style="flex:0 1 220px">${imp.wb.SheetNames.map(s => opt(s, imp.sheet, 'ชีต: ' + s)).join('')}</select>` : ''}
       <span class="muted">พบ ${imp.rows.length} แถว</span>
     </div>
-    <div class="section-title">1) จับคู่คอลัมน์ใน Excel กับข้อมูลในโปรแกรม <span class="muted" style="font-weight:400">(เดาให้แล้ว ตรวจสอบ/แก้ได้)</span></div>
-    <div class="map-grid">${IMPORT_FIELDS.map(f => `<div><label>${f.label}</label>
-      <select onchange="imp.map['${f.key}']=this.value===''?undefined:+this.value; if('${f.key}'==='status') imp.statusMap={}; renderImport()">${colOpts(imp.map[f.key])}</select></div>`).join('')}</div>
-    ${rawStatuses.length ? `<div class="section-title">2) สถานะใน Excel → สถานะในโปรแกรม</div>
+    <details ${imp.mapOpen ? 'open' : ''} ontoggle="imp.mapOpen=this.open">
+      <summary class="section-title" style="cursor:pointer">${step++}) จับคู่คอลัมน์ <span class="muted" style="font-weight:400">(เดาให้แล้ว — กดเพื่อตรวจสอบ/แก้)</span></summary>
+      <div class="map-grid">${IMPORT_FIELDS.map(f => `<div><label>${f.label}</label>
+        <select onchange="imp.map['${f.key}']=this.value===''?undefined:+this.value; imp.statusMap={}; imp.kindMap={}; imp.actions={}; renderImport()">${colOpts(imp.map[f.key])}</select></div>`).join('')}</div>
+    </details>
+    ${rawKinds.length ? `<div class="section-title">${step++}) ประเภทใน Excel → แยกหน้า Lead / ลูกค้าปัจจุบัน</div>
+      <div class="map-grid">${rawKinds.map(v => `<div><label>"${esc(v)}"</label>
+        <select onchange="imp.kindMap[${esc(JSON.stringify(v))}]=this.value; renderImport()">${KINDS.map(k => opt(k.id, imp.kindMap[v] || guessKind(v), k.label)).join('')}</select></div>`).join('')}</div>` : ''}
+    ${rawStatuses.length ? `<details><summary class="section-title" style="cursor:pointer">${step++}) สถานะใน Excel → สถานะในโปรแกรม <span class="muted" style="font-weight:400">(${rawStatuses.length} แบบ — กดเพื่อตรวจสอบ)</span></summary>
       <div class="map-grid">${rawStatuses.map(v => `<div><label>"${esc(v)}"</label>
-        <select onchange="imp.statusMap[${esc(JSON.stringify(v))}]=this.value; renderImport()">${STATUSES.map(s => opt(s.id, imp.statusMap[v] || guessStatus(v), s.label)).join('')}</select></div>`).join('')}</div>` : ''}
-    <div class="section-title">${rawStatuses.length ? 3 : 2}) ถ้าลูกค้าซ้ำกับที่มีอยู่แล้ว (เบอร์เดียวกัน หรือ ชื่อ+บริษัทเดียวกัน)</div>
+        <select onchange="imp.statusMap[${esc(JSON.stringify(v))}]=this.value; renderImport()">${opt('', imp.statusMap[v] ?? guessStatus(v), '(อัตโนมัติ)')}${STATUSES.map(s => opt(s.id, imp.statusMap[v] ?? guessStatus(v), s.label)).join('')}</select></div>`).join('')}</div></details>` : ''}
+    <div class="section-title">${step++}) ตรวจรายการซ้ำ — พบ ${dups.length} รายการที่อาจซ้ำ (กับข้อมูลเดิม หรือซ้ำกันเองในไฟล์)</div>
     <div class="toolbar">
-      <select onchange="imp.mode=this.value; renderImport()" style="flex:0 1 420px">
-        ${opt('update', imp.mode, 'อัปเดตรายการเดิม (สถานะ / ต้องทำต่อ / เพิ่มบันทึกการคุย)')}
-        ${opt('skip', imp.mode, 'ข้าม ไม่แตะรายการเดิม')}
-        ${opt('add', imp.mode, 'เพิ่มเป็นรายการใหม่ทั้งหมด')}
-      </select>
+      <span>ผลลัพธ์: <b class="tag-new">เพิ่มใหม่ ${n.new}</b> · <b class="tag-upd">รวมกับรายการเดิม ${n.merge}</b> · ข้าม ${n.skip} · ⭐ ลูกค้าปัจจุบัน ${nCust}</span>
+      <label style="display:flex;gap:6px;align-items:center;margin:0;font-size:14px;color:var(--text);white-space:nowrap"><input type="checkbox" style="width:auto" ${imp.onlyDup ? 'checked' : ''} onchange="imp.onlyDup=this.checked; renderImport()"> แสดงเฉพาะที่อาจซ้ำ</label>
     </div>
-    <div class="section-title">ตัวอย่างที่จะนำเข้า (${recs.length} รายการ: ใหม่ ${nNew}, ซ้ำ ${recs.length - nNew})</div>
-    ${!imp.map.hasOwnProperty('name') || imp.map.name === undefined ? '<div class="warnbar" style="display:block">⚠️ ยังไม่ได้เลือกคอลัมน์ "ชื่อลูกค้า" — ระบบจะใช้ชื่อบริษัทแทน</div>' : ''}
-    <div class="table-wrap" style="max-height:340px;overflow:auto"><table class="lt">
-      <thead><tr><th></th><th>ลูกค้า</th><th>สถานะ</th><th>ทำอะไรอยู่</th><th>ต้องทำอะไรต่อ</th><th>ภายในวันที่</th><th>เบอร์</th></tr></thead>
-      <tbody>${recs.slice(0, 100).map(r => `<tr style="cursor:default">
-        <td>${existing.has(dupKey(r)) ? `<span class="tag-upd">ซ้ำ</span>` : `<span class="tag-new">ใหม่</span>`}</td>
+    ${!('name' in imp.map) || imp.map.name === undefined ? '<div class="warnbar" style="display:block">⚠️ ยังไม่ได้เลือกคอลัมน์ "ชื่อลูกค้า" — ระบบจะใช้ชื่อบริษัทแทน</div>' : ''}
+    <div class="table-wrap" style="max-height:420px;overflow:auto"><table class="lt">
+      <thead><tr><th>ลูกค้า</th><th>ซ้ำกับ?</th><th>สถานะ</th><th>ทำอะไรอยู่</th><th>ต้องทำอะไรต่อ</th><th>เบอร์ / อีเมล</th></tr></thead>
+      <tbody>${recs.filter(r => !imp.onlyDup || r.dup).slice(0, 400).map(r => `<tr style="cursor:default${r.action === 'skip' ? ';opacity:.45' : ''}">
         <td><b>${esc(r.name)}</b>${r.company && r.company !== r.name ? `<div class="muted">${esc(r.company)}</div>` : ''}</td>
-        <td><span class="pill s-${r.status}">${statusLabel(r.status)}</span></td>
+        <td style="min-width:200px">${r.dup ? `<div style="font-size:13px">${r.dup.target.existing ? 'ข้อมูลเดิม' : 'แถวด้านบน'}: <b>${esc(r.dup.target.lead.name)}</b>
+            <div class="muted">${esc(r.dup.reason)}</div></div>
+          <select class="small" style="margin-top:4px" onchange="imp.actions[${r._i}]=this.value; renderImport()">
+            ${opt('merge', r.action, '🔗 รวมเป็นรายการเดียว')}${opt('new', r.action, '➕ ไม่ซ้ำ เพิ่มใหม่')}${opt('skip', r.action, '⏭ ข้ามแถวนี้')}</select>`
+          : '<span class="tag-new">ใหม่</span>'}</td>
+        <td><span class="pill s-${r.status}">${statusLabel(r.status)}</span>${tempTag(r.temp)}</td>
         <td class="wrap">${r.lastDate ? `<span class="muted">${fmtDate(r.lastDate)}</span> ` : ''}${esc(r.current) || '<span class="muted">—</span>'}</td>
-        <td class="wrap">${esc(r.nextAction) || '<span class="muted">—</span>'}</td>
-        <td>${r.nextDate ? fmtDate(r.nextDate) : '<span class="muted">—</span>'}</td>
-        <td>${esc(r.phone) || '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody>
-    </table></div>
-    ${recs.length > 100 ? `<div class="muted">แสดง 100 แถวแรก</div>` : ''}`;
-  $('imp-go').textContent = `นำเข้า ${recs.length} รายการ`;
-  $('imp-go').disabled = !recs.length;
+        <td class="wrap">${esc(r.nextAction) || '<span class="muted">—</span>'}${r.nextDate ? ` <span class="muted">(${fmtDate(r.nextDate)})</span>` : ''}</td>
+        <td style="font-size:13px">${esc(r.phone)}${r.phone && r.email ? '<br>' : ''}${esc(r.email)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  $('imp-go').textContent = `นำเข้า (ใหม่ ${n.new} · รวม ${n.merge})`;
+  $('imp-go').disabled = !(n.new + n.merge);
 }
 function closeImport() { $('importModal').classList.remove('open'); imp = null; }
 function doImport() {
   const recs = buildRecords(); if (!recs.length) return;
   const now = new Date().toISOString();
-  const byKey = new Map(leads.map(l => [dupKey(l), l]));
-  let added = 0, updated = 0, skipped = 0;
-  const logOf = r => r.current ? [{ id: uid(), date: r.lastDate || today(), type: '📥 นำเข้าจาก Excel', text: r.current,
-                                    next: r.nextAction, nextDate: r.nextDate, statusChange: '' }] : [];
+  const made = new Map();                 // rec → lead it became (so later rows can merge into it)
+  let added = 0, merged = 0, skipped = 0;
   recs.forEach(r => {
-    const ex = imp.mode !== 'add' && byKey.get(dupKey(r));
-    if (ex && imp.mode === 'skip') { skipped++; return; }
-    if (ex) {
-      ['company', 'phone', 'email', 'website', 'source', 'value', 'notes'].forEach(k => { if (r[k]) ex[k] = r[k]; });
-      if (imp.map.status !== undefined && r.status) ex.status = r.status;
-      if (r.nextAction || r.nextDate) { ex.nextAction = r.nextAction; ex.nextDate = r.nextDate; }
-      const prev = (ex.logs || []).map(g => g.text);
-      if (r.current && !prev.includes(r.current)) ex.logs = [...logOf(r), ...(ex.logs || [])].sort((a, b) => b.date.localeCompare(a.date));
-      ex.updatedAt = now; updated++;
-    } else {
-      const l = { id: uid(), name: r.name, company: r.company, phone: r.phone, email: r.email, website: r.website,
-                  source: r.source, status: r.status, value: r.value, nextAction: r.nextAction, nextDate: r.nextDate,
-                  notes: r.notes, logs: logOf(r), hitAttempts: 0, createdAt: now, updatedAt: now };
-      leads.push(l); byKey.set(dupKey(l), l); added++;
-    }
+    if (r.action === 'skip') { skipped++; return; }
+    let target = null;
+    if (r.action === 'merge' && r.dup) target = r.dup.target.existing ? r.dup.target.lead : made.get(r.dup.target.lead);
+    if (target) { mergeInto(target, r); made.set(r, target); merged++; return; }
+    const l = { id: uid(), name: r.name, company: r.company, phone: r.phone, email: r.email, line: r.line, website: r.website,
+                source: r.source, status: r.status, temp: r.temp, item: r.item, value: r.value, nextAction: r.nextAction,
+                nextDate: r.nextDate, notes: r.notes, logs: r.logs, hitAttempts: 0, createdAt: now, updatedAt: now };
+    leads.push(l); made.set(r, l); added++;
   });
   closeImport(); persist();
   $('statusFilter').value = ''; $('search').value = ''; showTab('leads'); renderLeads();
-  toast(`นำเข้าแล้ว: ใหม่ ${added}, อัปเดต ${updated}${skipped ? `, ข้าม ${skipped}` : ''}`);
+  toast(`นำเข้าแล้ว: ใหม่ ${added}, รวมกับรายการเดิม ${merged}${skipped ? `, ข้าม ${skipped}` : ''}`);
 }
 $('importModal').addEventListener('click', e => { if (e.target.id === 'importModal') closeImport(); });
 function importJSON(e) {
@@ -950,11 +1138,11 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display
 
 // ---------- Init ----------
 STATUSES.forEach(s => {
-  ['f-status', 'l-status', 'statusFilter'].forEach(id => $(id).insertAdjacentHTML('beforeend', `<option value="${s.id}">${s.label}</option>`));
+  ['f-status', 'l-status', ...(s.id === 'won' ? [] : ['statusFilter'])].forEach(id => $(id).insertAdjacentHTML('beforeend', `<option value="${s.id}">${s.label}</option>`));
 });
 try { $('viewMode').value = localStorage.getItem('leadTracker.view') || 'table'; } catch {}
 $('viewMode').addEventListener('input', () => { try { localStorage.setItem('leadTracker.view', $('viewMode').value); } catch {} });
-['search', 'statusFilter', 'sortBy', 'viewMode'].forEach(id => $(id).addEventListener('input', renderLeads));
+['search', 'statusFilter', 'tempFilter', 'sortBy', 'viewMode'].forEach(id => $(id).addEventListener('input', renderLeads));
 $('hitFilter').addEventListener('input', renderHit);
 render();
 renderOutlookSettings();

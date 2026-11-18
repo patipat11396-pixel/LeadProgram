@@ -140,11 +140,13 @@
 
   <!-- TAB: LEADS -->
   <section id="tab-leads" hidden>
+    <div class="tabs" id="bucketTabs" style="margin-bottom:10px"></div>
     <div class="toolbar">
       <input id="search" placeholder="🔍 ค้นหา ชื่อ / บริษัท / เบอร์ / โน้ต">
       <select id="statusFilter"><option value="">กำลังติดตาม (ไม่รวมที่ไม่สนใจ)</option><option value="all">Lead ทั้งหมด</option></select>
       <select id="tempFilter"><option value="">ทุกระดับ</option><option value="hot">🔥 Hot</option><option value="warm">🌤 Warm</option><option value="cold">❄️ Cold</option></select>
       <select id="sortBy">
+        <option value="priority">เรียงตาม: ความสำคัญ (ถึงกำหนด → Hot → เสนอราคา)</option>
         <option value="next">เรียงตาม: วันที่ต้องทำต่อ</option>
         <option value="updated">เรียงตาม: อัปเดตล่าสุด</option>
         <option value="name">เรียงตาม: ชื่อ</option>
@@ -241,6 +243,7 @@
       <div><label>สถานะ</label><select id="f-status"></select></div>
       <div><label>ระดับความสนใจ</label><select id="f-temp"><option value="">—</option><option value="hot">🔥 Hot</option><option value="warm">🌤 Warm</option><option value="cold">❄️ Cold</option></select></div>
       <div><label>สินค้า (Item)</label><input id="f-item"></div>
+      <div><label>กล่อง Lead</label><select id="f-bucket"><option value="">อัตโนมัติ</option><option value="active">🔥 Active</option><option value="cold">❄️ Cold</option></select></div>
       <div><label>มูลค่าโดยประมาณ (บาท)</label><input id="f-value" inputmode="numeric"></div>
     </div>
     <div class="grid" style="margin-top:10px">
@@ -318,6 +321,20 @@ const STATUSES = [
 const ACTIVE = s => s !== 'won' && s !== 'lost';      // still in the sales pipeline
 const FOLLOW = l => l.status !== 'lost';               // follow-ups count (leads and current customers)
 const TEMPS = { hot: '🔥 Hot', warm: '🌤 Warm', cold: '❄️ Cold' };
+// Lead inbox: Active (work these first) vs Cold. Manual choice (l.bucket) overrides the automatic rule.
+function bucketOf(l) {
+  if (l.bucket === 'active' || l.bucket === 'cold') return l.bucket;
+  if (l.temp === 'cold') return 'cold';
+  if (l.temp === 'hot' || l.temp === 'warm' || l.status === 'interested' || l.status === 'proposal' || l.nextDate) return 'active';
+  const last = lastLog(l), d = last && last.date ? (new Date(today()) - new Date(last.date)) / 86400000 : Infinity;
+  return d <= 14 ? 'active' : 'cold';
+}
+function priority(l) {                    // lower = more urgent
+  const t = today(), o = { hot: 0, warm: 1 }[l.temp] ?? 2, st = { proposal: 0, interested: 1 }[l.status] ?? 2;
+  const due = l.nextDate ? (l.nextDate <= t ? 0 : 1) : 2;
+  return due * 100 + o * 10 + st;
+}
+let bucketF = 'active';
 const tempTag = t => TEMPS[t] ? ` <span class="pill t-${t}">${TEMPS[t]}</span>` : '';
 const statusLabel = id => (STATUSES.find(s => s.id === id) || STATUSES[0]).label;
 
@@ -411,12 +428,19 @@ function renderLeads() {
   const sf = $('statusFilter').value;
   const sort = $('sortBy').value;
   const cust = listMode === 'customers';
+  const pool = leads.filter(l => l.status !== 'won' && l.status !== 'lost');
+  const cnt = k => pool.filter(l => bucketOf(l) === k).length;
+  $('bucketTabs').style.display = cust ? 'none' : '';
+  $('bucketTabs').innerHTML = [['active', `🔥 Active (${cnt('active')})`], ['cold', `❄️ Cold (${cnt('cold')})`], ['all', 'ทั้งหมด']]
+    .map(([k, t]) => `<button class="tab ${bucketF === k ? 'active' : ''}" onclick="bucketF='${k}';renderLeads()">${t}</button>`).join('');
   let arr = leads.filter(l => cust ? l.status === 'won'
       : l.status !== 'won' && (sf === 'all' || (sf ? l.status === sf : l.status !== 'lost')))
+    .filter(l => cust || bucketF === 'all' || bucketOf(l) === bucketF)
     .filter(l => !$('tempFilter').value || l.temp === $('tempFilter').value).filter(l => !q ||
     [l.name, l.company, l.aka, l.phone, l.email, l.line, l.item, l.notes, l.nextAction, l.source, ...(l.logs || []).map(x => x.text)]
       .join(' ').toLowerCase().includes(q));
   arr.sort((a, b) => {
+    if (sort === 'priority') return priority(a) - priority(b) || (a.nextDate || '9999').localeCompare(b.nextDate || '9999');
     if (sort === 'name') return a.name.localeCompare(b.name, 'th');
     if (sort === 'updated') return (b.updatedAt || '').localeCompare(a.updatedAt || '');
     if (sort === 'temp') { const o = { hot: 0, warm: 1, cold: 2 }; return (o[a.temp] ?? 3) - (o[b.temp] ?? 3) || (a.nextDate || '9999').localeCompare(b.nextDate || '9999'); }
@@ -491,7 +515,7 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.datas
 function goStatus(id) { if (id === 'won') return showTab('customers'); $('statusFilter').value = id; showTab('leads'); }
 
 // ---------- Lead modal ----------
-const FIELDS = ['name', 'company', 'phone', 'email', 'line', 'website', 'source', 'status', 'temp', 'item', 'value', 'next', 'nextDate', 'notes'];
+const FIELDS = ['name', 'company', 'phone', 'email', 'line', 'website', 'source', 'status', 'temp', 'item', 'bucket', 'value', 'next', 'nextDate', 'notes'];
 function openLead(id) {
   currentId = id || null;
   const l = leads.find(x => x.id === id) || { status: 'new' };
